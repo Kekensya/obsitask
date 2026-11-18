@@ -26,11 +26,27 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "img-src": "'self' data:",
+        "connect-src": "ipc: http://ipc.localhost",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'",
+        "frame-src": "'none'"
+      },
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {
     "active": true,
+    "publisher": "Kekensya",
+    "copyright": "© 2026 Kekensya",
+    "shortDescription": "A small desktop widget for the tasks in your Obsidian vault",
+    "homepage": "https://github.com/Kekensya/obsitask",
     "targets": [
       "msi",
       "nsis"

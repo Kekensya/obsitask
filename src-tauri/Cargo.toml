@@ -1,8 +1,10 @@
 [package]
 name = "obsitask"
 version = "0.1.0"
-description = "Widget desktop yang menampilkan task dari daily note Obsidian"
+description = "A small desktop widget for the tasks in your Obsidian vault"
 authors = ["Kekensya"]
+license = "MIT"
+repository = "https://github.com/Kekensya/obsitask"
 edition = "2021"
 
 [lib]
