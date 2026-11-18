@@ -40,13 +40,25 @@
   --ring: color-mix(in srgb, var(--text) 78%, transparent);
   --sidebar: var(--card);
 
-  /* Opacity latar widget (diatur di Settings > General; diset dari main.js).
-     Hanya latar panel dan permukaan yang ikut; teks dan ikon tetap penuh. */
+  /* Opacity latar widget (Settings > General, 0-100%; diset dari main.js).
+     Semua LATAR di widget memakai token --panel / --well / --f-* di bawah,
+     yaitu warna tema dengan alpha dikali nilai ini. Teks, ikon, checkbox,
+     garis bawah tab, tombol aksen, dan scrollbar memakai warna tema biasa,
+     jadi tetap penuh. Di window Settings nilainya tetap 100% (= warna asli). */
   --opacity: 100%;
 
-  /* Turunan */
+  /* Latar yang ikut opacity */
   --panel: color-mix(in srgb, var(--bg) var(--opacity), transparent);
-  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent);
+  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent); /* quick-add, Notes, input, chip menu */
+  --f-hover: color-mix(in srgb, var(--hover) var(--opacity), transparent); /* hover baris, list terbuka */
+  --f-hover-strong: color-mix(in srgb, var(--hover-strong) var(--opacity), transparent); /* hover tombol */
+  --f-primary-soft: color-mix(in srgb, var(--primary-soft) var(--opacity), transparent); /* pilihan aktif */
+  --f-primary: color-mix(in srgb, var(--primary) var(--opacity), transparent); /* badge Today */
+  --f-raised: color-mix(in srgb, var(--raised) var(--opacity), transparent); /* popover, saran ~list */
+  --f-danger-soft: color-mix(in srgb, var(--danger-soft) var(--opacity), transparent);
+  --f-danger-bg: color-mix(in srgb, var(--danger-bg) var(--opacity), transparent); /* toast error */
+
+  /* Turunan */
   --hover-strong: color-mix(in srgb, var(--text) 12%, transparent);
   --chip: color-mix(in srgb, var(--text) 8%, transparent);
   --primary-line: color-mix(in srgb, var(--primary) 65%, transparent);

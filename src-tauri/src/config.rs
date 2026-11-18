@@ -34,14 +34,27 @@ pub struct Config {
     pub zoom: u32,
     /// Widget selalu di atas window lain.
     pub always_on_top: bool,
-    /// Opacity latar widget dalam persen (40-100); teks tetap penuh.
+    /// Opacity semua latar widget dalam persen (0-100); teks tetap penuh.
+    /// Nilai di luar rentang (juga negatif atau pecahan) dijepit saat dibaca.
+    #[serde(deserialize_with = "clamped_opacity")]
     pub opacity: u32,
 }
 
 pub const MIN_ZOOM: u32 = 80;
 pub const MAX_ZOOM: u32 = 150;
-pub const MIN_OPACITY: u32 = 40;
+pub const MIN_OPACITY: u32 = 0;
 pub const MAX_OPACITY: u32 = 100;
+
+/// Baca `opacity` sebagai angka apa pun (negatif, pecahan, terlalu besar) lalu
+/// jepit ke 0-100, supaya config lama atau yang diedit manual tetap valid.
+/// Bukan angka (NaN) dianggap default.
+fn clamped_opacity<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = f64::deserialize(d)?;
+    if v.is_nan() {
+        return Ok(Config::default().opacity);
+    }
+    Ok(v.round().clamp(MIN_OPACITY as f64, MAX_OPACITY as f64) as u32)
+}
 
 /// Batas atas `scan_days`, supaya polling tetap ringan.
 pub const MAX_SCAN_DAYS: u32 = 365;
@@ -363,13 +376,29 @@ mod tests {
         assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.opacity, cfg.theme.as_str()), ("system", 150, 100, "default"));
         cfg.appearance = " dark ".into();
         cfg.zoom = 10;
-        cfg.opacity = 5;
+        cfg.opacity = 0;
         cfg.normalize_display();
-        assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.opacity), ("dark", 80, 40));
+        assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.opacity), ("dark", 80, 0));
         // Config lama tanpa field tampilan memakai default.
         let old: Config = serde_json::from_str(r#"{"vault_path": "x"}"#).unwrap();
         assert_eq!((old.theme.as_str(), old.appearance.as_str(), old.zoom, old.always_on_top), ("default", "system", 100, true));
         assert_eq!(old.opacity, 95);
+    }
+
+    #[test]
+    fn opacity_from_file_is_clamped_to_0_100() {
+        let read = |json: &str| serde_json::from_str::<Config>(json).unwrap().opacity;
+        // Nilai config lama (rentang 40-100) tetap sama.
+        assert_eq!(read(r#"{"opacity": 40}"#), 40);
+        assert_eq!(read(r#"{"opacity": 86}"#), 86);
+        // Rentang baru.
+        assert_eq!(read(r#"{"opacity": 0}"#), 0);
+        assert_eq!(read(r#"{"opacity": 12}"#), 12);
+        // Di luar rentang dijepit, bukan error.
+        assert_eq!(read(r#"{"opacity": -20}"#), 0);
+        assert_eq!(read(r#"{"opacity": 250}"#), 100);
+        assert_eq!(read(r#"{"opacity": 66.6}"#), 67);
+        assert!(serde_json::from_str::<Config>(r#"{"opacity": "x"}"#).is_err());
     }
 
     #[test]
@@ -409,5 +438,8 @@ mod tests {
         assert!(apply_patch(&current, &patch(r#"{"zoom": "big"}"#)).is_err());
         assert_eq!(apply_patch(&current, &patch("{}")).unwrap().theme, "nord");
         assert_eq!(apply_patch(&current, &patch(r#"{"opacity": 60}"#)).unwrap().opacity, 60);
+        assert_eq!(apply_patch(&current, &patch(r#"{"opacity": 0}"#)).unwrap().opacity, 0);
+        assert_eq!(apply_patch(&current, &patch(r#"{"opacity": -5}"#)).unwrap().opacity, 0);
+        assert_eq!(apply_patch(&current, &patch(r#"{"opacity": 101}"#)).unwrap().opacity, 100);
     }
 }

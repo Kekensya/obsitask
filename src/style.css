@@ -80,7 +80,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   color: var(--muted);
   transition: background 0.15s, color 0.15s;
 }
-.icon-btn:hover { background: var(--hover-strong); color: var(--text); }
+.icon-btn:hover { background: var(--f-hover-strong); color: var(--text); }
 .icon-btn svg { width: 15px; height: 15px; }
 
 /* Judul satu baris + keterangan di kanan. */
@@ -118,7 +118,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border-radius: 6px;
   color: var(--faint);
 }
-.ghost-icon:hover { color: var(--text); background: var(--hover-strong); }
+.ghost-icon:hover { color: var(--text); background: var(--f-hover-strong); }
 .ghost-icon svg { width: 14px; height: 14px; }
 
 /* Tab teks rata kiri, garis bawah aksen untuk tab aktif. */
@@ -165,8 +165,10 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 .tabs button[aria-selected="true"] .badge {
-  color: var(--on-primary);
-  background: var(--primary);
+  /* Angka gelap/terang di atas aksen pekat; begitu latarnya memudar (< 80%)
+     pakai warna teks biasa supaya angkanya tetap terbaca. */
+  color: color-mix(in srgb, var(--on-primary) clamp(0%, (var(--opacity) - 79.5%) * 1000, 100%), var(--text));
+  background: var(--f-primary);
   border-color: var(--primary);
 }
 
@@ -190,7 +192,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border: 1px solid transparent;
   transition: background 0.12s;
 }
-.day:hover { background: var(--hover-strong); }
+.day:hover { background: var(--f-hover-strong); }
 .day .wd { font: 10px/1.3 var(--mono); color: var(--muted); }
 .day .dn { font: 600 15px/1.25 var(--display); }
 .day .bar-slot { height: 14px; display: flex; align-items: flex-end; }
@@ -198,7 +200,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .day.zero .wd, .day.zero .dn { opacity: 0.55; }
 .day.zero .bar { height: 1px; background: var(--faint); opacity: 0.6; }
 .day.off { opacity: 0.4; cursor: default; }
-.day[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary-line); }
+.day[aria-pressed="true"] { background: var(--f-primary-soft); border-color: var(--primary-line); }
 .day[aria-pressed="true"] .dn { color: var(--primary-text); }
 
 /* ---------- Daftar task ---------- */
@@ -223,7 +225,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   padding-left: 4px;
   border-radius: 7px;
 }
-.task:hover, .task:focus-within { background: var(--hover); }
+.task:hover, .task:focus-within { background: var(--f-hover); }
 
 /* Kotak checkbox 18px; garisnya menandai prioritas. */
 .task .box {
@@ -240,7 +242,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   --box-ring: var(--ring);
   transition: background 0.15s, box-shadow 0.15s;
 }
-.task .box:hover { background: var(--hover-strong); }
+.task .box:hover { background: var(--f-hover-strong); }
 .task .box svg { width: 12px; height: 12px; stroke-width: 3; opacity: 0; }
 .task.p-high .box { --box-ring: var(--p-high); }
 .task.p-medium .box { --box-ring: var(--p-medium); }
@@ -324,7 +326,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 }
 .task .more svg { fill: currentColor; }
 .task:hover .more, .task:focus-within .more, .task .more[aria-expanded="true"] { opacity: 1; }
-.task .more:hover, .task .more[aria-expanded="true"] { background: var(--hover-strong); color: var(--text); }
+.task .more:hover, .task .more[aria-expanded="true"] { background: var(--f-hover-strong); color: var(--text); }
 
 /* Judul grup: mono kecil huruf kecil, jumlah di kanan. */
 .task-list .group {
@@ -358,7 +360,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 /* ---------- Tab All: satu blok per list ---------- */
 
 .list-block { border-radius: 12px; margin-bottom: 2px; }
-.list-block.open { background: var(--hover); padding-bottom: 6px; }
+.list-block.open { background: var(--f-hover); padding-bottom: 6px; }
 .list-head { display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px 0 6px; }
 .list-toggle {
   flex: 1;
@@ -387,7 +389,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border-radius: 7px;
   color: var(--muted);
 }
-.list-plus:hover { color: var(--text); background: var(--hover-strong); }
+.list-plus:hover { color: var(--text); background: var(--f-hover-strong); }
 .list-plus svg { width: 14px; height: 14px; stroke-width: 2; }
 .list-block .list-tasks { padding: 0 6px 0 6px; }
 .list-block .group { padding: 10px 4px 3px 4px; }
@@ -479,9 +481,9 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 /* Token sebagai chip: latar tipis saja (tanpa padding/bayangan, supaya posisi
    huruf tetap sama persis dengan input di atasnya). */
 .tok { border-radius: 3px; }
-.tok.date { color: var(--tok-date); background: color-mix(in srgb, var(--tok-date) 10%, transparent); }
-.tok.prio { color: var(--tok-prio); background: color-mix(in srgb, var(--tok-prio) 10%, transparent); }
-.tok.list { color: var(--tok-list); background: color-mix(in srgb, var(--tok-list) 10%, transparent); }
+.tok.date { color: var(--tok-date); background: color-mix(in srgb, color-mix(in srgb, var(--tok-date) 10%, transparent) var(--opacity), transparent); }
+.tok.prio { color: var(--tok-prio); background: color-mix(in srgb, color-mix(in srgb, var(--tok-prio) 10%, transparent) var(--opacity), transparent); }
+.tok.list { color: var(--tok-list); background: color-mix(in srgb, color-mix(in srgb, var(--tok-list) 10%, transparent) var(--opacity), transparent); }
 
 .add-enter { flex: none; padding: 0 2px 0 4px; font: 12px var(--mono); color: var(--faint); }
 
@@ -500,7 +502,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   white-space: nowrap;
   transition: background 0.12s, color 0.12s;
 }
-.mini-btn:hover, .mini-btn[aria-expanded="true"] { background: var(--hover-strong); color: var(--text); }
+.mini-btn:hover, .mini-btn[aria-expanded="true"] { background: var(--f-hover-strong); color: var(--text); }
 .mini-btn svg { width: 13px; height: 13px; }
 .mini-btn.p-high { color: var(--p-high); }
 .mini-btn.p-medium { color: var(--p-medium); }
@@ -530,7 +532,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   max-height: 200px;
   overflow-y: auto;
   padding: 4px;
-  background: var(--raised);
+  background: var(--f-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px var(--shadow);
@@ -548,7 +550,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .suggest button .tilde { font: 12px var(--mono); color: var(--tok-list); }
 .suggest button .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .suggest button .n { font: 10.5px var(--mono); color: var(--muted); }
-.suggest button:hover, .suggest button[aria-selected="true"] { background: var(--primary-soft); }
+.suggest button:hover, .suggest button[aria-selected="true"] { background: var(--f-primary-soft); }
 
 /* ---------- Popover ---------- */
 
@@ -562,7 +564,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   flex-direction: column;
   gap: 8px;
   color: var(--text);
-  background: var(--raised);
+  background: var(--f-raised);
   border: 1px solid var(--border);
   border-radius: 11px;
   box-shadow: 0 8px 24px var(--shadow);
@@ -583,12 +585,12 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
-  background: var(--secondary);
+  background: var(--well);
   border: 1px solid transparent;
   border-radius: 7px;
 }
-.pop-chip:hover { background: var(--hover-strong); color: var(--text); }
-.pop-chip[aria-pressed="true"] { color: var(--text); background: var(--primary-soft); border-color: var(--primary-line); }
+.pop-chip:hover { background: var(--f-hover-strong); color: var(--text); }
+.pop-chip[aria-pressed="true"] { color: var(--text); background: var(--f-primary-soft); border-color: var(--primary-line); }
 .pop-chip .dot { width: 8px; height: 8px; border-radius: 2.5px; border: 1.5px solid var(--muted); }
 .pop-chip.p-high .dot { border-color: var(--p-high); }
 .pop-chip.p-medium .dot { border-color: var(--p-medium); }
@@ -599,7 +601,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   padding: 4px 6px;
   font: 12px var(--sans);
   color: var(--text);
-  background: var(--secondary);
+  background: var(--well);
   border: 1px solid var(--border);
   border-radius: 7px;
 }
@@ -615,7 +617,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border-top: 1px solid var(--border);
   border-radius: 0 0 7px 7px;
 }
-.pop-danger:hover { background: var(--danger-soft); }
+.pop-danger:hover { background: var(--f-danger-soft); }
 .pop-danger span { display: grid; }
 .pop-danger svg { width: 14px; height: 14px; }
 
@@ -683,7 +685,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   padding: 7px 12px;
   font-size: 12px;
   color: var(--on-danger);
-  background: var(--danger-bg);
+  background: var(--f-danger-bg);
   border-radius: 9px;
   z-index: 6;
 }
@@ -691,7 +693,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .toast.info {
   white-space: nowrap;
   color: var(--text);
-  background: var(--raised);
+  background: var(--f-raised);
   border: 1px solid var(--border);
   box-shadow: 0 6px 18px var(--shadow);
 }
@@ -704,7 +706,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   position: fixed;
   inset: 0;
   display: flex;
-  background: var(--bg);
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow-y: auto;
@@ -736,7 +738,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   padding: 7px 9px;
   font: 13px var(--sans);
   color: var(--text);
-  background: var(--secondary);
+  background: var(--well);
   border: 1px solid var(--border);
   border-radius: 8px;
   user-select: text;
@@ -752,8 +754,8 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-size: 12px;
   font-weight: 600;
 }
-.ghost-btn { background: var(--secondary); border: 1px solid var(--border); }
-.ghost-btn:hover { background: var(--hover-strong); }
+.ghost-btn { background: var(--well); border: 1px solid var(--border); }
+.ghost-btn:hover { background: var(--f-hover-strong); }
 .primary-btn { background: var(--primary); color: var(--on-primary); }
 .primary-btn:hover { filter: brightness(1.12); }
 
