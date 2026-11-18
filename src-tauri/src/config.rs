@@ -21,13 +21,17 @@ pub struct Config {
     pub default_list: String,
     /// Sembunyikan task yang sudah dicentang.
     pub hide_completed: bool,
-    /// Berapa hari ke belakang daily note dipindai untuk bagian "Overdue & due".
+    /// Berapa hari ke belakang daily note dipindai untuk task overdue / due.
     /// 0 = mati.
     pub scan_days: u32,
+    /// Berapa hari ke depan yang tampil di tab Upcoming (mulai besok).
+    pub upcoming_days: u32,
 }
 
 /// Batas atas `scan_days`, supaya polling tetap ringan.
 pub const MAX_SCAN_DAYS: u32 = 365;
+/// Batas atas `upcoming_days`.
+pub const MAX_UPCOMING_DAYS: u32 = 90;
 
 impl Default for Config {
     fn default() -> Self {
@@ -41,6 +45,7 @@ impl Default for Config {
             default_list: "Inbox".to_string(),
             hide_completed: false,
             scan_days: 30,
+            upcoming_days: 7,
         }
     }
 }

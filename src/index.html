@@ -19,11 +19,10 @@
         </button>
       </div>
 
-      <div class="segmented" role="tablist" aria-label="Day">
-        <button role="tab" data-tab="-1" aria-selected="false">Yesterday</button>
-        <button role="tab" data-tab="0" aria-selected="true">Today</button>
-        <button role="tab" data-tab="1" aria-selected="false">Tomorrow</button>
-        <button role="tab" data-tab="all" aria-selected="false" title="All lists in Tasks.md">All</button>
+      <div class="segmented" role="tablist" aria-label="View">
+        <button role="tab" data-tab="today" aria-selected="true" title="Overdue, due today, and today's daily note">Today</button>
+        <button role="tab" data-tab="upcoming" aria-selected="false" title="Due in the coming days">Upcoming</button>
+        <button role="tab" data-tab="all" aria-selected="false" title="All lists in the tasks file">All</button>
       </div>
 
       <div class="bar-side end" data-tauri-drag-region>
@@ -42,7 +41,7 @@
         <h2>Tasks</h2>
         <button class="text-btn" id="btn-completed" type="button" aria-pressed="false" hidden>Show completed</button>
         <span class="count" id="count"></span>
-        <button class="accent-btn" id="btn-open" title="Open daily note in Obsidian" aria-label="Open daily note in Obsidian">
+        <button class="accent-btn" id="btn-open" title="Open in Obsidian" aria-label="Open in Obsidian">
           <svg viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 00-1 1v11a1 1 0 001 1h11a1 1 0 001-1v-5" /></svg>
         </button>
       </div>
@@ -103,11 +102,11 @@
         <input id="f-tasks-file" type="text" placeholder="Tasks.md" />
       </label>
 
-      <label>Default list <small>new tasks from the All tab go here</small>
+      <label>Default list <small>new tasks from the widget go here</small>
         <input id="f-default-list" type="text" placeholder="Inbox" />
       </label>
 
-      <label>Tasks heading <small>tasks added to a daily note go under this heading</small>
+      <label>Tasks heading <small>used when restoring a deleted daily-note task</small>
         <input id="f-tasks-heading" type="text" placeholder="## Tasks" />
       </label>
 
@@ -115,7 +114,11 @@
         <input id="f-heading" type="text" placeholder="## Notes" />
       </label>
 
-      <label>Look back for due tasks <small>days of older daily notes to scan for open tasks that are due; 0 = off</small>
+      <label>Upcoming days <small>how far ahead the Upcoming tab looks, starting tomorrow</small>
+        <input id="f-upcoming" type="number" min="1" max="90" step="1" placeholder="7" />
+      </label>
+
+      <label>Look back for due tasks <small>days of older daily notes to scan for overdue tasks; 0 = off</small>
         <input id="f-scan" type="number" min="0" max="365" step="1" placeholder="30" />
       </label>
 

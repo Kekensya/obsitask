@@ -1,6 +1,6 @@
 "use strict";
 
-const POLL_MS = 2000; // seberapa sering daily note dibaca ulang
+const POLL_MS = 2000; // seberapa sering file dibaca ulang
 const SAVE_DELAY_MS = 700; // jeda setelah berhenti mengetik sebelum notes disimpan
 const UNDO_MS = 6000; // lama tombol Undo tampil setelah menghapus task
 
@@ -32,6 +32,7 @@ const el = {
   empty: $("empty"),
   count: $("count"),
   showDone: $("btn-completed"),
+  open: $("btn-open"),
   addForm: $("add-form"),
   addInput: $("add-input"),
   addPriority: $("add-priority"),
@@ -47,8 +48,7 @@ const el = {
 };
 
 const state = {
-  tab: "day", // "day" = daily note hari `offset`; "all" = semua list di Tasks.md
-  offset: 0, // -1 kemarin, 0 hari ini, 1 besok (tab All memakai 0 untuk Notes)
+  tab: "today", // "today" | "upcoming" | "all"
   view: null,
   lastJson: "",
   notesDirty: false,
@@ -119,6 +119,15 @@ function dayLabel(iso) {
   return d.toLocaleDateString("en-US", opts);
 }
 
+/** Judul grup tanggal di tab Upcoming: "Tomorrow" / "Thu, Nov 20". */
+function dateHeading(iso) {
+  if (iso === isoPlus(1)) return "Tomorrow";
+  const d = parseIso(iso);
+  const opts = { weekday: "short", month: "short", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-US", opts);
+}
+
 /* ---------- Rendering ---------- */
 
 const escapeHtml = (s) =>
@@ -138,8 +147,11 @@ function h(tag, props = {}, ...children) {
 
 const isClosed = (task) => task.done || task.cancelled;
 
-/** Judul (HTML) + keterangan kecil (jam, deadline) dari sebuah task. */
-function describeTask(task) {
+/**
+ * Judul (HTML) + keterangan kecil (jam, deadline, asal) dari sebuah task.
+ * `hideDue`: tanggal yang sudah jelas dari grupnya, jadi tidak perlu ditulis.
+ */
+function describeTask(task, { hideDue } = {}) {
   let text = task.title;
   const subs = [];
   let overdue = false;
@@ -151,12 +163,12 @@ function describeTask(task) {
     text = text.slice(time[0].length);
   }
 
-  if (task.due) {
+  if (task.due && task.due !== hideDue) {
     overdue = !isClosed(task) && task.due < isoToday();
     subs.push((overdue ? "Overdue · " : "Due ") + dayLabel(task.due));
   }
-  // Task dari daily note lain (bagian "Overdue & due"): sebut asalnya.
-  if (task.date) subs.push("from " + dayLabel(task.date));
+  // Task dari daily note hari lain: sebut asalnya (sekali, di task induk).
+  if (task.date && task.level === 0) subs.push("from " + dayLabel(task.date));
 
   const html = escapeHtml(text)
     .replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") // [[link|alias]] -> alias
@@ -169,19 +181,19 @@ function describeTask(task) {
 
 /**
  * Urutan tampil: belum selesai dulu, lalu prioritas, lalu deadline, lalu urutan
- * di file. Subtask diurutkan di antara saudaranya dan tetap di bawah induknya.
+ * asal. Subtask diurutkan di antara saudaranya dan tetap di bawah induknya.
  * File tidak pernah diurutkan — ini hanya tampilan.
  */
 function sortTasks(tasks) {
   const roots = [];
   const stack = [];
-  for (const task of tasks) {
-    const node = { task, kids: [] };
+  tasks.forEach((task, index) => {
+    const node = { task, index, kids: [] };
     stack.length = Math.min(stack.length, task.level);
     (stack.length ? stack[stack.length - 1].kids : roots).push(node);
     stack.push(node);
-  }
-  const key = ({ task }) => [isClosed(task) ? 1 : 0, PRIORITY_RANK[task.priority] ?? 3, task.due || "9999-99-99", task.line];
+  });
+  const key = ({ task, index }) => [isClosed(task) ? 1 : 0, PRIORITY_RANK[task.priority] ?? 3, task.due || "9999-99-99", index];
   const compare = (a, b) => {
     const ka = key(a);
     const kb = key(b);
@@ -194,8 +206,8 @@ function sortTasks(tasks) {
   return flatten(roots);
 }
 
-function renderTask(task) {
-  const { html, sub, overdue } = describeTask(task);
+function renderTask(task, opts = {}) {
+  const { html, sub, overdue } = describeTask(task, opts);
   const box = h("button", {
     class: "box",
     role: "checkbox",
@@ -219,48 +231,33 @@ function renderTask(task) {
   });
   const more = h("button", {
     class: "more",
-    title: "Priority, due date, delete",
+    title: "Priority, due date, list, delete",
     "aria-label": "Task options",
     html: ICON.more,
     onclick: () => openTaskMenu(task, more),
   });
+  // Di Today / Upcoming, task dari Tasks.md diberi label nama list-nya.
+  const label = task.list && state.tab !== "all" && task.level === 0 && h("span", { class: "list-label" }, task.list);
   const li = h(
     "li",
     {
       class: `task p-${task.priority}` + (task.done ? " done" : "") + (task.cancelled ? " cancelled" : ""),
-      // Task dari note lain tampil rata, tanpa indentasi asalnya.
-      style: `padding-left:${4 + (task.date ? 0 : task.level) * 18}px`,
+      style: `padding-left:${4 + task.level * 18}px`,
       oncontextmenu: (e) => {
         e.preventDefault();
         openTaskMenu(task, more);
       },
     },
     box,
-    h("div", { class: "body" }, title, sub && h("div", { class: "sub" + (overdue ? " overdue" : "") }, sub)),
+    h(
+      "div",
+      { class: "body" },
+      title,
+      (sub || label) && h("div", { class: "sub" }, sub && h("span", { class: overdue ? "overdue" : "" }, sub), label)
+    ),
     more
   );
   return li;
-}
-
-/** Task "Overdue & due": prioritas, lalu deadline, lalu note asal yang lebih lama. */
-function sortDue(tasks) {
-  const key = (t) => [PRIORITY_RANK[t.priority] ?? 3, t.due, t.date, t.line];
-  return [...tasks].sort((a, b) => {
-    const ka = key(a);
-    const kb = key(b);
-    for (let i = 0; i < ka.length; i++) {
-      if (ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
-    }
-    return 0;
-  });
-}
-
-function readDueCollapsed() {
-  try {
-    return localStorage.getItem("dueCollapsed") === "true";
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -280,8 +277,25 @@ function groupLabel(text, { count, collapsed, onToggle, kind } = {}) {
   );
 }
 
+/** Grup yang bisa dilipat, status lipatnya disimpan di preferensi `pref`. */
+function foldGroup(text, pref, defaultCollapsed, count, kind) {
+  const collapsed = readPref(pref, defaultCollapsed);
+  const label = groupLabel(text, {
+    count,
+    kind,
+    collapsed,
+    onToggle: () => {
+      writePref(pref, !collapsed);
+      renderTasks(state.view);
+    },
+  });
+  return { label, collapsed };
+}
+
 /** Urutkan (subtask tetap di bawah induknya), lalu buang yang selesai kalau perlu. */
 const visible = (tasks, hideDone) => sortTasks(tasks).filter((t) => !hideDone || !isClosed(t));
+const roots = (tasks) => tasks.filter((t) => t.level === 0);
+const openRoots = (tasks) => roots(tasks).filter((t) => !isClosed(t)).length;
 
 /** Input kecil "Add to <list>…" di akhir tiap list pada tab All. */
 function listAddRow(name) {
@@ -342,58 +356,72 @@ function renderLists(view) {
       })
     );
     if (collapsed) continue;
-    rows.push(...visible(tasks, !showDone).map(renderTask));
+    rows.push(...visible(tasks, !showDone).map((t) => renderTask(t)));
     rows.push(listAddRow(list.name));
   }
-  el.tasks.replaceChildren(...rows);
-  el.empty.hidden = true;
-  el.tasks.hidden = false;
-  state.stale = false;
+  return { rows, message: "" };
+}
+
+/** Tab Today: Overdue, Today (due hari ini + daily note hari ini), Completed today. */
+function renderToday(view) {
+  const a = view.agenda;
+  const hide = view.hide_completed;
+  const today = isoToday();
+  const overdue = visible(a.overdue, hide);
+  const due = visible(a.today, hide);
+  const done = sortTasks(a.done);
+  const open = openRoots(a.overdue) + openRoots(a.today);
+  el.count.textContent = open || done.length ? `${open} open` : "";
+
+  const rows = [];
+  if (!overdue.length && !due.length && !done.length) return { rows, message: "Nothing for today. Add a task above." };
+  if (overdue.length) {
+    const g = foldGroup("Overdue", "overdueCollapsed", false, roots(a.overdue).length, "alert");
+    rows.push(g.label);
+    if (!g.collapsed) rows.push(...overdue.map((t) => renderTask(t)));
+  }
+  rows.push(groupLabel("Today", { count: openRoots(a.today) }));
+  if (due.length) rows.push(...due.map((t) => renderTask(t, { hideDue: today })));
+  else rows.push(h("li", { class: "group-empty" }, a.today.length ? "All done." : "Nothing due today."));
+  if (done.length) {
+    const g = foldGroup("Completed today", "doneTodayCollapsed", true, roots(a.done).length);
+    rows.push(g.label);
+    if (!g.collapsed) rows.push(...done.map((t) => renderTask(t)));
+  }
+  return { rows, message: "" };
+}
+
+/** Tab Upcoming: deadline besok sampai N hari ke depan, dikelompokkan per tanggal. */
+function renderUpcoming(view) {
+  const byDate = new Map();
+  let date = null;
+  // Item datang sebagai blok (induk level 0 + subtask); blok ikut tanggal induknya.
+  for (const t of view.agenda.upcoming) {
+    if (t.level === 0) date = t.due;
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push(t);
+  }
+  el.count.textContent = byDate.size ? `${openRoots(view.agenda.upcoming)} open` : "";
+  const n = view.upcoming_days;
+  const rows = [];
+  for (const d of [...byDate.keys()].sort()) {
+    const tasks = byDate.get(d);
+    rows.push(groupLabel(dateHeading(d), { count: openRoots(tasks) }));
+    rows.push(...visible(tasks, view.hide_completed).map((t) => renderTask(t, { hideDue: d })));
+  }
+  const message = rows.length ? "" : `Nothing due in the next ${n === 1 ? "day" : n + " days"}.`;
+  return { rows, message };
 }
 
 function renderTasks(view) {
-  if (state.tab === "all") return renderLists(view);
-  el.showDone.hidden = true;
-  const all = view.tasks;
-  const shown = visible(all, view.hide_completed);
-  const doneCount = all.filter(isClosed).length;
-  const due = sortDue(view.due || []);
-
-  el.count.textContent = all.length ? `${doneCount}/${all.length}` : "";
-
-  let message = "";
-  if (!view.exists) message = "No daily note for this day yet. Add a task to create it.";
-  else if (!all.length) message = "No tasks in this note.";
-  else if (!shown.length) message = "All done.";
-
-  const rows = [];
-  if (due.length) {
-    const collapsed = readDueCollapsed();
-    rows.push(
-      groupLabel("Overdue & due", {
-        count: due.length,
-        collapsed,
-        onToggle: () => {
-          try {
-            localStorage.setItem("dueCollapsed", String(!collapsed));
-          } catch {}
-          renderTasks(state.view);
-        },
-      })
-    );
-    if (!collapsed) rows.push(...due.map(renderTask));
-    const tab = el.tabs.find((b) => b.getAttribute("aria-selected") === "true");
-    rows.push(groupLabel(tab ? tab.textContent : "This note"));
-    if (message) rows.push(h("li", { class: "group-empty" }, message));
-  }
-  rows.push(...shown.map(renderTask));
+  if (state.tab !== "all") el.showDone.hidden = true;
+  const render = { today: renderToday, upcoming: renderUpcoming, all: renderLists }[state.tab];
+  const { rows, message } = render(view);
   el.tasks.replaceChildren(...rows);
-
   // Pesan besar di tengah hanya kalau tidak ada apa pun untuk ditampilkan.
-  const nothing = !due.length && !!message;
   el.empty.textContent = message;
-  el.empty.hidden = !nothing;
-  el.tasks.hidden = nothing;
+  el.empty.hidden = !message;
+  el.tasks.hidden = !!message;
   state.stale = false;
 }
 
@@ -411,14 +439,16 @@ function releaseHold() {
   if (state.stale && !isHeld() && state.view) renderTasks(state.view);
 }
 
+const TITLES = { upcoming: "Upcoming", all: "All lists" };
+
 function applyView(view) {
   state.view = view;
   state.lastJson = JSON.stringify(view);
   el.date.textContent =
-    state.tab === "all"
-      ? "All lists"
-      : parseIso(view.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  el.addInput.placeholder = state.tab === "all" ? `Add to ${view.default_list}…` : "Add a task…";
+    TITLES[state.tab] || parseIso(view.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  el.addInput.placeholder = state.tab === "today" ? "Add a task for today…" : `Add to ${view.default_list}…`;
+  const where = state.tab === "all" ? view.tasks_file : view.file;
+  el.open.title = `Open ${where || "note"} in Obsidian`;
   if (isHeld()) state.stale = true;
   else renderTasks(view);
 
@@ -432,10 +462,8 @@ function applyView(view) {
 async function refresh(force = false) {
   if (state.busy && !force) return;
   state.busy = true;
-  const offset = state.offset;
   try {
-    const view = await invoke("get_day", { offset });
-    if (offset !== state.offset) return; // hari sudah diganti selagi menunggu
+    const view = await invoke("get_view");
     if (!view.configured) {
       openSettings(true);
       return;
@@ -449,16 +477,14 @@ async function refresh(force = false) {
 }
 
 /**
- * Jalankan command yang mengubah file `src` (default: daily note hari yang
- * sedang tampil), lalu gambar tampilan yang sedang dibuka. Mengembalikan hasil
- * command, atau null kalau gagal.
+ * Jalankan command yang mengubah file asal task (`src`: `offset` daily note
+ * dan/atau `source: "tasks"`), lalu gambar tampilan terbaru. Mengembalikan
+ * hasil command, atau null kalau gagal.
  */
-async function mutate(cmd, args, src = { offset: state.offset }) {
-  const show = state.offset;
-  const tab = state.tab;
+async function mutate(cmd, args, src = {}) {
   try {
-    const result = await invoke(cmd, { offset: src.offset, source: src.source, show, ...args });
-    if (show === state.offset && tab === state.tab) applyView(result.view || result);
+    const result = await invoke(cmd, { offset: src.offset ?? 0, source: src.source, ...args });
+    applyView(result.view || result);
     return result;
   } catch (err) {
     showToast(String(err));
@@ -468,31 +494,19 @@ async function mutate(cmd, args, src = { offset: state.offset }) {
 }
 
 const target = (task) => ({ line: task.line, text: task.text });
-/**
- * File asal task: task "Overdue & due" membawa `offset` daily note asalnya;
- * task list membawa `source: "tasks"` (Tasks.md).
- */
-const srcOf = (task) => ({ offset: task.offset ?? state.offset, source: task.source });
+/** File asal task: daily note `offset` hari dari hari ini, atau Tasks.md. */
+const srcOf = (task) => ({ offset: task.offset ?? 0, source: task.source });
 
 const toggleTask = (task) => mutate("toggle_task", target(task), srcOf(task));
 
 async function deleteTask(task) {
   const src = srcOf(task);
-  const show = state.offset;
-  const tab = state.tab;
   const result = await mutate("delete_task", target(task), src);
   if (!result) return;
   showToast("Task deleted", {
     ms: UNDO_MS,
     action: "Undo",
-    run: async () => {
-      try {
-        const view = await invoke("restore_task", { offset: src.offset, source: src.source, list: task.list, show, ...result.removed });
-        if (show === state.offset && tab === state.tab) applyView(view);
-      } catch (err) {
-        showToast(String(err));
-      }
-    },
+    run: () => mutate("restore_task", { list: task.list, ...result.removed }, src),
   });
 }
 
@@ -533,7 +547,7 @@ function startEdit(task, titleEl) {
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
-/* ---------- Popover (prioritas, deadline, hapus) ---------- */
+/* ---------- Popover (prioritas, deadline, list, hapus) ---------- */
 
 let popoverAnchor = null;
 
@@ -673,8 +687,8 @@ window.addEventListener("resize", closePopover);
 /* ---------- Tambah task ---------- */
 
 /**
- * Baca token quick-add (!high, @tomorrow, ...) dari input. Hanya untuk pratinjau
- * di tombol dan untuk mode contoh; yang berlaku tetap parser di tasks.rs.
+ * Baca token quick-add (!high, @tomorrow, ~list, ...) dari input. Hanya untuk
+ * pratinjau di tombol dan untuk mode contoh; yang berlaku tetap parser di tasks.rs.
  */
 function quickTokens(text) {
   const out = { title: [], priority: null, due: null, list: null };
@@ -692,11 +706,14 @@ function quickTokens(text) {
   return out;
 }
 
+/** Deadline task baru: tombol, lalu token, lalu "hari ini" kalau ditambah dari tab Today. */
+const draftDue = (typed) => state.draft.due || typed.due || (state.tab === "today" ? isoToday() : null);
+
 /** Tombol prioritas/tanggal mencerminkan pilihan tombol atau token yang diketik. */
 function renderDraft() {
   const typed = quickTokens(el.addInput.value);
   const priority = state.draft.priority || typed.priority || "none";
-  const due = state.draft.due || typed.due;
+  const due = draftDue(typed);
   el.addPriority.className = `mini-btn p-${priority}`;
   el.addPriority.title = priority === "none" ? "Priority" : `Priority: ${priority}`;
   el.addDue.classList.toggle("set", !!due);
@@ -721,7 +738,7 @@ el.addPriority.addEventListener("click", () =>
 el.addDue.addEventListener("click", () =>
   openPopover(
     el.addDue,
-    dueSection(state.draft.due || quickTokens(el.addInput.value).due, (due) => {
+    dueSection(draftDue(quickTokens(el.addInput.value)), (due) => {
       state.draft.due = due || null;
       closePopover();
       renderDraft();
@@ -730,25 +747,39 @@ el.addDue.addEventListener("click", () =>
   )
 );
 
+/** Apakah task baru dengan deadline `due` di list `list` terlihat di tab sekarang. */
+function shownHere(due, list) {
+  const today = isoToday();
+  if (state.tab === "today") return !!due && due <= today;
+  if (state.tab === "upcoming") return !!due && due > today && due <= isoPlus(state.view.upcoming_days);
+  return !isListCollapsed(list);
+}
+
+// Task baru dari kotak atas selalu masuk Tasks.md: list default (atau ~list),
+// dengan deadline hari ini kalau dari tab Today (kecuali token/tombol bilang lain).
 el.addForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = el.addInput.value.trim();
-  if (!text) return;
-  const args = { text };
+  if (!text || !state.view) return;
+  const typed = quickTokens(text);
+  const args = { text, list: state.view.default_list };
   if (state.draft.priority) args.priority = state.draft.priority;
+  // Deadline dari token dibaca parser di tasks.rs; argumen `due` hanya untuk tombol / default Today.
   if (state.draft.due) args.due = state.draft.due;
-  // Tab All: task baru masuk ke list default. Token ~list tetap menang.
-  if (state.tab === "all" && state.view) args.list = state.view.default_list;
-  const typedList = quickTokens(text).list;
-  const names = (state.view?.lists || []).map((l) => l.name);
+  else if (!typed.due && state.tab === "today") args.due = isoToday();
+  const names = state.view.lists.map((l) => l.name);
+  const list = (typed.list && resolveList(names, typed.list)) || state.view.default_list;
+  const due = args.due || typed.due;
   const result = await mutate("add_task", args);
   if (!result) return; // gagal: biarkan teksnya supaya bisa diperbaiki
   el.addInput.value = "";
   state.draft = { priority: null, due: null };
   renderDraft();
   el.tasks.scrollTop = 0;
-  // Dari tab hari, ~list mengirim task ke Tasks.md: beri tahu ke mana perginya.
-  if (typedList && state.tab !== "all") showToast(`Added to ${resolveList(names, typedList) || typedList}`, { info: true, ms: 2200 });
+  // Kalau task baru tidak terlihat di tab ini, beri tahu ke mana perginya.
+  if (!shownHere(due, list) || (typed.list && state.tab !== "all")) {
+    showToast(`Added to ${list}` + (due ? ` · due ${dayLabel(due)}` : ""), { info: true, ms: 2600 });
+  }
 });
 
 el.addInput.addEventListener("keydown", (e) => {
@@ -760,43 +791,36 @@ el.addInput.addEventListener("keydown", (e) => {
   }
 });
 
-/* ---------- Notes ---------- */
+/* ---------- Notes (selalu daily note hari ini) ---------- */
 
 async function saveNotes() {
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
   if (!state.notesDirty) return;
-  const offset = state.offset;
   const text = el.notes.value;
   el.notesStatus.textContent = "Saving…";
   try {
-    const view = await invoke("save_notes", { offset, notes: text });
+    const view = await invoke("save_notes", { notes: text });
     if (el.notes.value === text) {
       state.notesDirty = false;
       el.notesStatus.textContent = "Saved";
     }
-    if (offset === state.offset) applyView(view);
+    applyView(view);
   } catch (err) {
     el.notesStatus.textContent = "Not saved";
     showToast(String(err));
   }
 }
 
-/** Pindah tab: angka = daily note hari `offset`, "all" = semua list. */
-async function selectTab(key) {
-  const tab = key === "all" ? "all" : "day";
-  const offset = key === "all" ? 0 : Number(key);
-  if (tab === state.tab && offset === state.offset) return;
+function selectTab(tab) {
+  if (tab === state.tab) return;
   closePopover();
-  await saveNotes(); // simpan dulu notes hari sebelumnya
   state.tab = tab;
-  state.offset = offset;
-  state.lastJson = "";
-  el.notesStatus.textContent = "";
-  el.tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === String(key))));
-  el.notes.blur();
+  el.tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   el.tasks.scrollTop = 0;
-  await refresh(true);
+  renderDraft();
+  if (state.view) applyView(state.view);
+  refresh(true);
 }
 
 /* ---------- Toast ---------- */
@@ -835,6 +859,7 @@ const field = {
   heading: $("f-heading"),
   hide: $("f-hide"),
   scan: $("f-scan"),
+  upcoming: $("f-upcoming"),
   tasksFile: $("f-tasks-file"),
   defaultList: $("f-default-list"),
 };
@@ -850,6 +875,7 @@ async function openSettings(firstRun = false) {
   field.heading.value = cfg.notes_heading;
   field.hide.checked = cfg.hide_completed;
   field.scan.value = cfg.scan_days;
+  field.upcoming.value = cfg.upcoming_days;
   field.tasksFile.value = cfg.tasks_file;
   field.defaultList.value = cfg.default_list;
   $("settings-title").textContent = firstRun ? "Set up ObsiTask" : "Settings";
@@ -877,6 +903,11 @@ $("btn-browse").addEventListener("click", async () => {
 });
 field.vault.addEventListener("change", detectDaily);
 
+const clampInt = (value, min, max, fallback) => {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && value !== "" ? Math.max(min, Math.min(max, n)) : fallback;
+};
+
 el.form.addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
@@ -888,7 +919,8 @@ el.form.addEventListener("submit", async (e) => {
         tasks_heading: field.tasksHeading.value.trim() || "## Tasks",
         notes_heading: field.heading.value.trim() || "## Notes",
         hide_completed: field.hide.checked,
-        scan_days: Math.max(0, Math.min(365, Math.round(Number(field.scan.value) || 0))),
+        scan_days: clampInt(field.scan.value, 0, 365, 30),
+        upcoming_days: clampInt(field.upcoming.value, 1, 90, 7),
         tasks_file: field.tasksFile.value.trim() || "Tasks.md",
         default_list: field.defaultList.value.trim() || "Inbox",
       },
@@ -937,11 +969,9 @@ $("btn-close").addEventListener("click", async () => {
   await saveNotes();
   if (appWindow) appWindow.close();
 });
-// Tombol hijau: daily note hari itu, atau Tasks.md di tab All.
-$("btn-open").addEventListener("click", () =>
-  invoke("open_in_obsidian", { offset: state.offset, source: state.tab === "all" ? "tasks" : undefined }).catch((err) =>
-    showToast(String(err))
-  )
+// Tombol hijau: Tasks.md di tab All, daily note hari ini di tab lain.
+el.open.addEventListener("click", () =>
+  invoke("open_in_obsidian", { offset: 0, source: state.tab === "all" ? "tasks" : undefined }).catch((err) => showToast(String(err)))
 );
 
 el.showDone.addEventListener("click", () => {
@@ -980,23 +1010,31 @@ function mockInvoke() {
   const make = (level, title, extra = {}) =>
     sync({ line: 0, level, title, done: false, cancelled: false, priority: "none", due: null, done_date: null, ...extra });
 
-  // Daily note contoh per offset hari (0 = hari ini). Nomor baris diurutkan ulang.
+  // Daily note contoh per offset hari (0 = hari ini).
   const days = {
-    "-6": [make(0, "Kirim revisi proposal", { priority: "high", due: isoPlus(-2) }), make(0, "Sudah beres", { due: isoPlus(-3), done: true, done_date: isoPlus(-3) })],
+    "-6": [
+      make(0, "Kirim revisi proposal", { priority: "high", due: isoPlus(-2) }),
+      make(0, "Sudah beres", { due: isoPlus(-3), done: true, done_date: isoPlus(-3) }),
+    ],
     "-3": [make(0, "Bayar tagihan internet", { due: isoToday() }), make(0, "Tanpa deadline")],
+    "-1": [make(0, "Kumpulkan form KRS", { done: true, done_date: isoToday() })],
     0: [
-      make(0, "Kerjain laporan projek akhir IoT", { priority: "high", due: isoPlus(-7) }),
+      make(0, "Kerjain laporan projek akhir IoT", { priority: "high" }),
       make(1, "Wiring sensor gate", { done: true, done_date: isoPlus(-1) }),
       make(1, "Tulis bab pengujian", { priority: "medium" }),
       make(0, "Review PR **ObsiTask** #dev", { priority: "low" }),
-      make(0, "15:00 Rapat asisten praktikum", { due: isoToday() }),
-      make(0, "Baca [[Paper ICN|paper ICN]] bab 2", { due: isoPlus(3) }),
+      make(0, "15:00 Rapat asisten praktikum"),
       make(0, "Beli kabel jumper", { done: true, done_date: isoToday() }),
     ],
+    2: [make(0, "Bawa laptop ke lab", { due: isoPlus(3) })],
   };
   // Tasks.md contoh: satu list per heading "## Nama".
   const lists = [
-    { name: "Inbox", heading: true, tasks: [make(0, "Cari referensi skripsi"), make(0, "Balas email dosen", { priority: "medium", due: isoPlus(1) })] },
+    {
+      name: "Inbox",
+      heading: true,
+      tasks: [make(0, "Cari referensi skripsi"), make(0, "Balas email dosen", { priority: "medium", due: isoPlus(1) })],
+    },
     {
       name: "Kuliah",
       heading: true,
@@ -1005,41 +1043,69 @@ function mockInvoke() {
         make(1, "Ambil data Wireshark"),
         make(1, "Tulis analisis", { done: true, done_date: isoPlus(-1) }),
         make(0, "Belajar untuk kuis basis data", { due: isoPlus(5) }),
+        make(0, "Revisi makalah", { priority: "high", due: isoPlus(-1) }),
+        make(0, "Baca [[Paper ICN|paper ICN]] bab 2", { due: isoToday() }),
       ],
     },
-    { name: "Personal", heading: true, tasks: [make(0, "Perpanjang SIM", { priority: "low" }), make(0, "Gym", { done: true, done_date: isoToday() })] },
+    {
+      name: "Personal",
+      heading: true,
+      tasks: [make(0, "Perpanjang SIM", { priority: "low", due: isoPlus(9) }), make(0, "Gym", { done: true, done_date: isoToday() })],
+    },
     { name: "Someday", heading: true, tasks: [] },
   ];
-  const notes = { 0: "Ide: widget cukup baca daily note.\nTanya dosen soal jadwal demo." };
-  const renumber = (offset) => (days[offset] || []).forEach((t, i) => (t.line = 3 + i));
-  Object.keys(days).forEach(renumber);
-  /** Nomor baris Tasks.md: tiap heading satu baris, lalu task-tasknya. */
-  const renumberLists = () => {
+  let notes = "Ide: widget cukup baca daily note.\nTanya dosen soal jadwal demo.";
+  let upcomingDays = 7;
+
+  /** Nomor baris: daily note mulai baris 3; Tasks.md tiap heading satu baris. */
+  const renumber = () => {
+    for (const tasks of Object.values(days)) tasks.forEach((t, i) => (t.line = 3 + i));
     let line = 0;
     for (const l of lists) {
       line++;
       for (const t of l.tasks) t.line = line++;
     }
   };
-  renumberLists();
+  renumber();
 
-  const view = (offset) => {
-    const date = isoPlus(offset);
-    const due = [];
-    for (let back = 1; back <= 30; back++) {
-      for (const t of days[offset - back] || []) {
-        if (!t.done && !t.cancelled && t.due && t.due <= date) due.push({ ...t, offset: offset - back, date: isoPlus(offset - back) });
+  /** Versi JS dari tasks::agenda (lihat tasks.rs). */
+  const agendaOf = (tasks, today, until, wholeDay, tag, out) => {
+    for (let i = 0; i < tasks.length; ) {
+      const t = tasks[i];
+      const closed = t.done || t.cancelled;
+      let group = null;
+      if (wholeDay) group = closed ? "done" : "today";
+      else if (closed) group = t.done && t.done_date === today ? "done" : null;
+      else if (t.due) group = t.due < today ? "overdue" : t.due === today ? "today" : t.due <= until ? "upcoming" : null;
+      if (!group) {
+        i++;
+        continue;
       }
+      let end = i + 1;
+      while (end < tasks.length && tasks[end].level > t.level) end++;
+      out[group].push(...tasks.slice(i, end).map((c) => ({ ...c, level: c.level - t.level, ...tag })));
+      i = end;
+    }
+  };
+
+  const view = () => {
+    const today = isoToday();
+    const until = isoPlus(upcomingDays);
+    const agenda = { overdue: [], today: [], done: [], upcoming: [] };
+    for (const l of lists) agendaOf(l.tasks, today, until, false, { source: "tasks", list: l.name }, agenda);
+    agendaOf(days[0] || [], today, until, true, { source: "daily", offset: 0 }, agenda);
+    for (const key of Object.keys(days).map(Number).filter((o) => o !== 0).sort((a, b) => b - a)) {
+      agendaOf(days[key], today, until, false, { source: "daily", offset: key, date: isoPlus(key) }, agenda);
     }
     return {
       configured: true,
-      date,
-      file: `Daily/${date}.md`,
-      exists: offset in days,
-      tasks: (days[offset] || []).map((t) => ({ ...t })),
-      notes: notes[offset] || "",
+      date: today,
+      file: `Daily/${today}.md`,
+      exists: 0 in days,
+      notes,
       hide_completed: false,
-      due,
+      upcoming_days: upcomingDays,
+      agenda,
       lists: lists.map((l) => ({ ...l, tasks: l.tasks.map((t) => ({ ...t })) })),
       default_list: "Inbox",
       tasks_file: "Tasks.md",
@@ -1055,10 +1121,6 @@ function mockInvoke() {
     if (!t || t.text !== args.text) throw "That task has changed in the note.";
     return t;
   };
-  const renumberAll = () => {
-    Object.keys(days).forEach(renumber);
-    renumberLists();
-  };
   /** Ambil task + subtask-nya dari tempatnya. */
   const takeBlock = (args) => {
     const holder = holderOf(args);
@@ -1066,7 +1128,7 @@ function mockInvoke() {
     const at = holder.indexOf(t);
     let end = at + 1;
     while (end < holder.length && holder[end].level > t.level) end++;
-    return { holder, at, block: holder.splice(at, end - at) };
+    return { at, block: holder.splice(at, end - at) };
   };
   const listNamed = (query) => {
     const name = resolveList(lists.map((l) => l.name), query);
@@ -1086,53 +1148,52 @@ function mockInvoke() {
     if (due != null) t.due = due || null;
     return sync(t);
   };
-  const shown = (args) => view(args.show ?? args.offset);
   return async (cmd, args = {}) => {
     switch (cmd) {
-      case "get_day":
-        return view(args.offset);
+      case "get_view":
+        return view();
       case "toggle_task": {
         const t = find(args);
         t.done = !t.done && !t.cancelled;
         t.cancelled = false;
         t.done_date = t.done ? isoToday() : null;
         sync(t);
-        return shown(args);
+        return view();
       }
       case "add_task": {
         const wanted = quickTokens(args.text).list || args.list;
-        const target = wanted ? listNamed(wanted).tasks : (days[args.offset] ||= []);
-        target.push(apply(make(0, ""), { title: args.text, priority: args.priority, due: args.due }));
-        renumberAll();
-        return view(args.offset);
+        const into = wanted ? listNamed(wanted).tasks : (days[args.offset] ||= []);
+        into.push(apply(make(0, ""), { title: args.text, priority: args.priority, due: args.due }));
+        renumber();
+        return view();
       }
       case "update_task":
         if (args.title != null && quickTokens(args.title).list) throw "To change a task's list, use Move to list.";
         apply(find(args), args);
-        return shown(args);
+        return view();
       case "delete_task": {
         const { at, block } = takeBlock(args);
-        renumberAll();
-        return { view: shown(args), removed: { line: at, text: JSON.stringify(block), anchor: null } };
+        renumber();
+        return { view: view(), removed: { line: at, text: JSON.stringify(block), anchor: null } };
       }
       case "restore_task": {
-        const holder = args.source === "tasks" ? listNamed(args.list || "Inbox").tasks : days[args.offset];
+        const holder = args.source === "tasks" ? listNamed(args.list || "Inbox").tasks : (days[args.offset] ||= []);
         holder.splice(args.line, 0, ...JSON.parse(args.text));
-        renumberAll();
-        return shown(args);
+        renumber();
+        return view();
       }
       case "move_task": {
         const dest = listNamed(args.list);
         const { block } = takeBlock(args);
         const base = block[0].level;
         dest.tasks.push(...block.map((t) => ({ ...t, level: t.level - base })));
-        renumberAll();
-        return shown(args);
+        renumber();
+        return view();
       }
       case "save_notes":
-        notes[args.offset] = args.notes;
-        if (!(args.offset in days)) days[args.offset] = [];
-        return view(args.offset);
+        notes = args.notes;
+        days[0] ||= [];
+        return view();
       case "get_config":
         return {
           vault_path: "C:\\Vault",
@@ -1142,9 +1203,13 @@ function mockInvoke() {
           notes_heading: "## Notes",
           hide_completed: false,
           scan_days: 30,
+          upcoming_days: upcomingDays,
           tasks_file: "Tasks.md",
           default_list: "Inbox",
         };
+      case "save_config":
+        upcomingDays = args.config.upcoming_days;
+        return null;
       default:
         return null;
     }

@@ -14,44 +14,62 @@ use tauri_plugin_dialog::DialogExt;
 use config::{Config, DetectedDaily};
 use tasks::{Task, TaskList};
 
-/// Semua yang dibutuhkan widget untuk menggambar satu hari, plus list permanen.
+/// Semua yang dibutuhkan widget: tab Today / Upcoming / All dan Notes hari ini.
 #[derive(Serialize)]
-struct DayView {
+struct View {
     configured: bool,
-    /// Tanggal ISO (YYYY-MM-DD) dari hari yang ditampilkan.
+    /// Tanggal hari ini (YYYY-MM-DD).
     date: String,
-    /// Path daily note relatif terhadap vault.
+    /// Path daily note hari ini relatif terhadap vault.
     file: String,
+    /// Daily note hari ini sudah ada.
     exists: bool,
-    tasks: Vec<Task>,
+    /// Notes daily note hari ini.
     notes: String,
     hide_completed: bool,
-    /// Task belum selesai dari daily note hari-hari sebelumnya yang deadline-nya
-    /// paling lambat hari yang ditampilkan (bagian "Overdue & due").
-    due: Vec<DueTask>,
-    /// List di Tasks.md, sesuai urutan heading. List default selalu ada
-    /// (kosong kalau heading-nya belum ada di file).
+    upcoming_days: u32,
+    /// Grup tab Today dan Upcoming, dari Tasks.md dan daily note.
+    agenda: AgendaView,
+    /// List di Tasks.md, sesuai urutan heading (tab All). List default selalu
+    /// ada (kosong kalau heading-nya belum ada di file).
     lists: Vec<TaskList>,
     default_list: String,
     /// Path Tasks.md relatif terhadap vault.
     tasks_file: String,
 }
 
-/// Task dari daily note lain. `offset` menunjuk file asalnya, jadi command
-/// tulis yang sama (toggle/update/delete) bisa dipakai langsung.
-#[derive(Serialize)]
-struct DueTask {
-    offset: i64,
-    /// Tanggal daily note asal (YYYY-MM-DD).
-    date: String,
+#[derive(Serialize, Default)]
+struct AgendaView {
+    overdue: Vec<Item>,
+    today: Vec<Item>,
+    /// Selesai hari ini.
+    done: Vec<Item>,
+    /// Deadline besok sampai `upcoming_days` hari ke depan.
+    upcoming: Vec<Item>,
+}
+
+/// Task beserta file asalnya, supaya command tulis bisa langsung dipakai.
+#[derive(Serialize, Clone)]
+struct Item {
     #[serde(flatten)]
     task: Task,
+    /// "tasks" (Tasks.md) atau "daily".
+    source: &'static str,
+    /// Daily note: selisih hari dari hari ini.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset: Option<i64>,
+    /// Daily note hari lain: tanggalnya (untuk label "from Nov 10").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date: Option<String>,
+    /// Tasks.md: nama list-nya.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    list: Option<String>,
 }
 
 /// Cache hasil parse (berdasarkan mtime), dipakai bersama semua command.
 #[derive(Default)]
 struct Caches {
-    /// Daily note hari-hari sebelumnya, untuk "Overdue & due".
+    /// Daily note hari lain (dipindai untuk overdue / due / upcoming).
     daily: Mutex<scan::NoteCache<Vec<Task>>>,
     /// Tasks.md.
     lists: Mutex<scan::NoteCache<Vec<TaskList>>>,
@@ -60,7 +78,7 @@ struct Caches {
 /// Hasil menghapus task: tampilan baru + data untuk undo.
 #[derive(Serialize)]
 struct Deleted {
-    view: DayView,
+    view: View,
     removed: tasks::Removed,
 }
 
@@ -139,34 +157,6 @@ fn iso(d: NaiveDate) -> String {
     d.format("%Y-%m-%d").to_string()
 }
 
-/// Pindai daily note `scan_days` hari sebelum `date` (pakai cache mtime) dan
-/// kumpulkan task belum selesai yang deadline-nya <= `date`.
-fn collect_due(cfg: &Config, date: NaiveDate, caches: &Caches) -> Vec<DueTask> {
-    let through = iso(date);
-    let base = today();
-    let mut cache = caches.daily.lock().unwrap_or_else(|e| e.into_inner());
-    // Format tanggal tanpa hari (mis. bulanan) bisa memetakan beberapa tanggal
-    // ke file yang sama; file hari yang sedang tampil juga dilewati.
-    let mut seen: HashSet<PathBuf> = HashSet::from([cfg.daily_note_path(date)]);
-    let mut out = Vec::new();
-    for back in 1..=i64::from(cfg.scan_days.min(config::MAX_SCAN_DAYS)) {
-        let d = date - Duration::days(back);
-        let path = cfg.daily_note_path(d);
-        if !seen.insert(path.clone()) {
-            continue;
-        }
-        if let Some(found) = cache.get(&path, tasks::parse_tasks) {
-            out.extend(tasks::due_by(&found, &through).into_iter().map(|task| DueTask {
-                offset: (d - base).num_days(),
-                date: iso(d),
-                task,
-            }));
-        }
-    }
-    cache.retain(|p| seen.contains(p));
-    out
-}
-
 /// List di Tasks.md (pakai cache mtime). List default ditambahkan di depan
 /// kalau belum ada, supaya selalu ada tempat untuk menambah task.
 fn load_lists(cfg: &Config, caches: &Caches) -> Vec<TaskList> {
@@ -195,17 +185,76 @@ fn list_names(cfg: &Config, content: &str) -> Vec<String> {
     names
 }
 
-fn build_view(cfg: &Config, offset: i64, caches: &Caches) -> DayView {
-    let date = day(offset);
-    let mut view = DayView {
+impl AgendaView {
+    /// Tambahkan hasil `tasks::agenda` satu file, ditandai asalnya lewat `tag`.
+    fn extend(&mut self, a: tasks::Agenda, tag: impl Fn(Task) -> Item) {
+        self.overdue.extend(a.overdue.into_iter().map(&tag));
+        self.today.extend(a.today.into_iter().map(&tag));
+        self.done.extend(a.done.into_iter().map(&tag));
+        self.upcoming.extend(a.upcoming.into_iter().map(&tag));
+    }
+}
+
+/// Kumpulkan grup Today / Upcoming dari semua sumber:
+/// - Tasks.md, per list;
+/// - daily note hari ini (`today_tasks`): semua task-nya;
+/// - daily note `scan_days` hari ke belakang dan `upcoming_days` hari ke depan
+///   (pakai cache mtime): hanya task yang deadline / tanggal selesainya relevan.
+fn collect_agenda(cfg: &Config, lists: &[TaskList], today_tasks: &[Task], caches: &Caches) -> AgendaView {
+    let base = today();
+    let (now, until) = (iso(base), iso(base + Duration::days(i64::from(cfg.upcoming_days.min(config::MAX_UPCOMING_DAYS)))));
+    let mut view = AgendaView::default();
+
+    for list in lists {
+        view.extend(tasks::agenda(&list.tasks, &now, &until, false), |task| Item {
+            task,
+            source: "tasks",
+            offset: None,
+            date: None,
+            list: Some(list.name.clone()),
+        });
+    }
+    let daily = |offset: i64| {
+        move |task| Item {
+            task,
+            source: "daily",
+            offset: Some(offset),
+            date: (offset != 0).then(|| iso(base + Duration::days(offset))),
+            list: None,
+        }
+    };
+    view.extend(tasks::agenda(today_tasks, &now, &until, true), daily(0));
+
+    let mut cache = caches.daily.lock().unwrap_or_else(|e| e.into_inner());
+    // Format tanggal tanpa hari (mis. bulanan) bisa memetakan beberapa tanggal
+    // ke file yang sama; daily note hari ini sudah dihitung di atas.
+    let mut seen: HashSet<PathBuf> = HashSet::from([cfg.daily_note_path(base)]);
+    let back = i64::from(cfg.scan_days.min(config::MAX_SCAN_DAYS));
+    let ahead = i64::from(cfg.upcoming_days.min(config::MAX_UPCOMING_DAYS));
+    for offset in (-back..0).rev().chain(1..=ahead) {
+        let path = cfg.daily_note_path(base + Duration::days(offset));
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        if let Some(found) = cache.get(&path, tasks::parse_tasks) {
+            view.extend(tasks::agenda(&found, &now, &until, false), daily(offset));
+        }
+    }
+    cache.retain(|p| seen.contains(p));
+    view
+}
+
+fn build_view(cfg: &Config, caches: &Caches) -> View {
+    let date = today();
+    let mut view = View {
         configured: cfg.is_configured(),
         date: iso(date),
         file: String::new(),
         exists: false,
-        tasks: Vec::new(),
         notes: String::new(),
         hide_completed: cfg.hide_completed,
-        due: Vec::new(),
+        upcoming_days: cfg.upcoming_days.min(config::MAX_UPCOMING_DAYS),
+        agenda: AgendaView::default(),
         lists: Vec::new(),
         default_list: cfg.default_list(),
         tasks_file: String::new(),
@@ -215,13 +264,14 @@ fn build_view(cfg: &Config, offset: i64, caches: &Caches) -> DayView {
     }
     view.file = cfg.daily_note_rel(date);
     view.tasks_file = cfg.vault_rel(&cfg.tasks_path());
-    view.due = collect_due(cfg, date, caches);
-    view.lists = load_lists(cfg, caches);
+    let mut today_tasks = Vec::new();
     if let Ok(content) = std::fs::read_to_string(cfg.daily_note_path(date)) {
         view.exists = true;
-        view.tasks = tasks::parse_tasks(&content);
+        today_tasks = tasks::parse_tasks(&content);
         view.notes = tasks::read_notes(&content, &notes_heading(cfg));
     }
+    view.lists = load_lists(cfg, caches);
+    view.agenda = collect_agenda(cfg, &view.lists, &today_tasks, caches);
     view
 }
 
@@ -281,6 +331,7 @@ fn save_config(app: AppHandle, config: Config) -> Result<(), String> {
     cfg.notes_heading = notes_heading(&cfg);
     cfg.tasks_heading = tasks_heading(&cfg);
     cfg.scan_days = cfg.scan_days.min(config::MAX_SCAN_DAYS);
+    cfg.upcoming_days = cfg.upcoming_days.clamp(1, config::MAX_UPCOMING_DAYS);
     cfg.tasks_file = match cfg.tasks_file.trim() {
         "" => "Tasks.md".to_string(),
         f => f.to_string(),
@@ -305,15 +356,13 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-fn get_day(app: AppHandle, caches: State<Caches>, offset: i64) -> Result<DayView, String> {
-    Ok(build_view(&load_config(&app)?, offset, &caches))
+fn get_view(app: AppHandle, caches: State<Caches>) -> Result<View, String> {
+    Ok(build_view(&load_config(&app)?, &caches))
 }
 
-// Command tulis menerima:
-// - `offset` + `source`: file yang diubah. Tanpa `source` = daily note `offset`
-//   (bisa file asal task di "Overdue & due"); `source: "tasks"` = Tasks.md.
-// - `show`: hari yang sedang tampil di widget, untuk tampilan yang dikembalikan
-//   (default: `offset`).
+// Command tulis menerima `offset` + `source` untuk memilih file yang diubah:
+// tanpa `source` (atau "daily") = daily note `offset` hari dari hari ini;
+// `source: "tasks"` = Tasks.md. Semuanya mengembalikan tampilan terbaru.
 
 #[tauri::command]
 fn toggle_task(
@@ -323,13 +372,12 @@ fn toggle_task(
     source: Option<String>,
     line: usize,
     text: String,
-    show: Option<i64>,
-) -> Result<DayView, String> {
+) -> Result<View, String> {
     let cfg = load_config(&app)?;
     edit_source(&cfg, source_of(offset, source.as_deref())?, false, |content| {
         Ok((tasks::toggle_task(content, line, &text, today())?, ()))
     })?;
-    Ok(build_view(&cfg, show.unwrap_or(offset), &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
 /// Tambah task baru. `text` boleh berisi token quick-add (`!high`,
@@ -348,7 +396,7 @@ fn add_task(
     priority: Option<String>,
     due: Option<String>,
     list: Option<String>,
-) -> Result<DayView, String> {
+) -> Result<View, String> {
     let cfg = load_config(&app)?;
     let wanted = tasks::parse_quick(&text, today())
         .list
@@ -368,7 +416,7 @@ fn add_task(
             Ok((tasks::add_task(content, &tasks_heading(&cfg), &task), ()))
         })?,
     }
-    Ok(build_view(&cfg, offset, &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
 /// Ubah judul / prioritas / deadline. Argumen yang tidak dikirim tidak diubah;
@@ -385,8 +433,7 @@ fn update_task(
     title: Option<String>,
     priority: Option<String>,
     due: Option<String>,
-    show: Option<i64>,
-) -> Result<DayView, String> {
+) -> Result<View, String> {
     let cfg = load_config(&app)?;
     if title.as_deref().is_some_and(|t| tasks::parse_quick(t, today()).list.is_some()) {
         return Err("To change a task's list, use Move to list.".into());
@@ -399,7 +446,7 @@ fn update_task(
     edit_source(&cfg, source_of(offset, source.as_deref())?, false, |content| {
         Ok((tasks::update_task(content, line, &text, &edit, today())?, ()))
     })?;
-    Ok(build_view(&cfg, show.unwrap_or(offset), &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
 #[tauri::command]
@@ -410,14 +457,13 @@ fn delete_task(
     source: Option<String>,
     line: usize,
     text: String,
-    show: Option<i64>,
 ) -> Result<Deleted, String> {
     let cfg = load_config(&app)?;
     let removed = edit_source(&cfg, source_of(offset, source.as_deref())?, false, |content| {
         tasks::delete_task(content, line, &text)
     })?;
     Ok(Deleted {
-        view: build_view(&cfg, show.unwrap_or(offset), &caches),
+        view: build_view(&cfg, &caches),
         removed,
     })
 }
@@ -436,8 +482,7 @@ fn restore_task(
     text: String,
     anchor: Option<String>,
     list: Option<String>,
-    show: Option<i64>,
-) -> Result<DayView, String> {
+) -> Result<View, String> {
     let cfg = load_config(&app)?;
     let source = source_of(offset, source.as_deref())?;
     let heading = match source {
@@ -448,7 +493,7 @@ fn restore_task(
     edit_source(&cfg, source, true, |content| {
         Ok((tasks::restore_task(content, &removed, &heading), ()))
     })?;
-    Ok(build_view(&cfg, show.unwrap_or(offset), &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
 /// Pindahkan task (beserta subtask-nya) ke akhir list `list` di Tasks.md, dari
@@ -468,8 +513,7 @@ fn move_task(
     line: usize,
     text: String,
     list: String,
-    show: Option<i64>,
-) -> Result<DayView, String> {
+) -> Result<View, String> {
     let cfg = load_config(&app)?;
     let source = source_of(offset, source.as_deref())?;
     let from = source_path(&cfg, source);
@@ -496,17 +540,18 @@ fn move_task(
             format!("Copied to {name}, but couldn't remove it from the original note ({e}) — it's in both places now.")
         })?;
     }
-    Ok(build_view(&cfg, show.unwrap_or(offset), &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
+/// Simpan Notes daily note hari ini.
 #[tauri::command]
-fn save_notes(app: AppHandle, caches: State<Caches>, offset: i64, notes: String) -> Result<DayView, String> {
+fn save_notes(app: AppHandle, caches: State<Caches>, notes: String) -> Result<View, String> {
     let cfg = load_config(&app)?;
     // Daily note yang belum ada dianggap kosong, dan baru dibuat kalau ada isinya.
-    edit_source(&cfg, Source::Daily(offset), true, |content| {
+    edit_source(&cfg, Source::Daily(0), true, |content| {
         Ok((tasks::write_notes(content, &notes_heading(&cfg), &notes), ()))
     })?;
-    Ok(build_view(&cfg, offset, &caches))
+    Ok(build_view(&cfg, &caches))
 }
 
 fn percent_encode(s: &str) -> String {
@@ -578,7 +623,7 @@ pub fn run() {
             save_config,
             detect_daily,
             pick_folder,
-            get_day,
+            get_view,
             toggle_task,
             add_task,
             update_task,

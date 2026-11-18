@@ -434,15 +434,70 @@ fn build_tasks(raw: impl IntoIterator<Item = (usize, ParsedLine)>) -> Vec<Task> 
         .collect()
 }
 
-/// Task yang belum selesai (bukan `[x]`, bukan `[-]`) dengan deadline paling
-/// lambat `through` (`YYYY-MM-DD`). Urutan file dipertahankan.
-pub fn due_by(tasks: &[Task], through: &str) -> Vec<Task> {
-    tasks
-        .iter()
-        .filter(|t| !t.done && !t.cancelled)
-        .filter(|t| t.due.as_deref().is_some_and(|d| d <= through))
-        .cloned()
-        .collect()
+/* ---------- Agenda (tab Today / Upcoming) ---------- */
+
+/// Task satu file yang dibagi ke grup tab Today / Upcoming. Setiap task yang
+/// terpilih dibawa bersama subtask-nya (blok berurutan, level relatif terhadap
+/// task induk = 0), jadi subtask tetap menempel di bawah induknya.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Agenda {
+    /// Belum selesai, deadline < hari ini.
+    pub overdue: Vec<Task>,
+    /// Belum selesai, deadline = hari ini (atau semua task daily note hari ini).
+    pub today: Vec<Task>,
+    /// Selesai hari ini (`✅` hari ini; atau task selesai di daily note hari ini).
+    pub done: Vec<Task>,
+    /// Belum selesai, hari ini < deadline <= `until`.
+    pub upcoming: Vec<Task>,
+}
+
+/// Akhir (eksklusif) subtree task ke-`i` di `tasks` (urut file).
+fn subtree_end(tasks: &[Task], i: usize) -> usize {
+    let level = tasks[i].level;
+    let mut j = i + 1;
+    while j < tasks.len() && tasks[j].level > level {
+        j += 1;
+    }
+    j
+}
+
+/// Bagi task dari satu file ke grup agenda. `today` dan `until` berformat
+/// `YYYY-MM-DD`.
+///
+/// - `whole_day = false` (Tasks.md, daily note hari lain): hanya task dengan
+///   deadline / tanggal selesai yang relevan yang terpilih. Kalau sebuah task
+///   tidak terpilih, subtask-nya tetap diperiksa sendiri-sendiri.
+/// - `whole_day = true` (daily note hari ini): semua task masuk; blok yang
+///   induknya belum selesai ke `today`, yang sudah selesai/batal ke `done`.
+pub fn agenda(tasks: &[Task], today: &str, until: &str, whole_day: bool) -> Agenda {
+    let mut out = Agenda::default();
+    let mut i = 0;
+    while i < tasks.len() {
+        let t = &tasks[i];
+        let closed = t.done || t.cancelled;
+        let group = if whole_day {
+            Some(if closed { &mut out.done } else { &mut out.today })
+        } else if closed {
+            (t.done && t.done_date.as_deref() == Some(today)).then_some(&mut out.done)
+        } else {
+            match t.due.as_deref() {
+                Some(d) if d < today => Some(&mut out.overdue),
+                Some(d) if d == today => Some(&mut out.today),
+                Some(d) if d <= until => Some(&mut out.upcoming),
+                _ => None,
+            }
+        };
+        match group {
+            Some(group) => {
+                let end = subtree_end(tasks, i);
+                let base = t.level;
+                group.extend(tasks[i..end].iter().map(|c| Task { level: c.level - base, ..c.clone() }));
+                i = end;
+            }
+            None => i += 1,
+        }
+    }
+    out
 }
 
 /* ---------- Quick-add ---------- */
@@ -1075,20 +1130,45 @@ mod tests {
         assert!(delete_task(note, 5, "dalam juga").is_err());
     }
 
+    /// (judul, level) tiap task di sebuah grup agenda.
+    fn titles(v: &[Task]) -> Vec<(String, usize)> {
+        v.iter().map(|t| (t.title.clone(), t.level)).collect()
+    }
+    fn tl(v: &[(&str, usize)]) -> Vec<(String, usize)> {
+        v.iter().map(|&(s, l)| (s.to_string(), l)).collect()
+    }
+
+    const AGENDA: &str = "## Kuliah\n- [ ] lewat 📅 2026-11-10\n    - [ ] sub lewat\n    - [x] sub selesai ✅ 2026-11-01\n- [ ] hari ini ⏫ 📅 2026-11-17\n- [ ] besok 📅 2026-11-18\n- [ ] batas 📅 2026-11-24\n- [ ] kejauhan 📅 2026-11-25\n- [ ] tanpa deadline\n    - [ ] anak due hari ini 📅 2026-11-17\n        - [ ] cucu\n- [x] selesai hari ini 📅 2026-11-10 ✅ 2026-11-17\n    - [ ] anak belum\n- [x] selesai kemarin ✅ 2026-11-16\n- [x] selesai tanpa tanggal\n- [-] batal 📅 2026-11-01\n```\n- [ ] di kode 📅 2026-11-17\n```\n";
+
     #[test]
-    fn picks_open_tasks_due_by_a_date() {
-        let note = "## Tasks\n- [ ] lewat 📅 2026-11-10\n- [ ] hari ini ⏫ 📅 2026-11-17\n- [ ] besok 📅 2026-11-18\n- [ ] tanpa deadline\n- [x] selesai 📅 2026-11-01 ✅ 2026-11-02\n- [-] batal 📅 2026-11-01\n    - [ ] subtask lewat 📅 2026-11-12\n```\n- [ ] di kode 📅 2026-11-01\n```\n- [ ] bukan metadata 2026-11-01\n";
-        let tasks = parse_tasks(note);
-        let got = due_by(&tasks, "2026-11-17");
-        let titles: Vec<&str> = got.iter().map(|t| t.title.as_str()).collect();
-        assert_eq!(titles, ["lewat", "hari ini", "subtask lewat"]);
-        assert_eq!(got[2].line, 7);
-        assert_eq!(got[1].priority, Priority::High);
-        // Batas tanggal ikut dihitung; baris tanpa metadata tidak pernah terpilih.
-        assert_eq!(due_by(&tasks, "2026-11-09").len(), 0);
-        assert_eq!(due_by(&tasks, "2026-11-18").len(), 4);
-        assert!(due_by(&parse_tasks(NOTE), "9999-12-31").is_empty());
-        assert!(due_by(&parse_tasks(""), "2026-11-17").is_empty());
+    fn groups_tasks_for_agenda() {
+        let a = agenda(&parse_tasks(AGENDA), "2026-11-17", "2026-11-24", false);
+        // Subtask ikut induknya (termasuk yang sudah selesai), level relatif.
+        assert_eq!(titles(&a.overdue), tl(&[("lewat", 0), ("sub lewat", 1), ("sub selesai", 1)]));
+        // Task tanpa deadline tidak terpilih, tapi subtask-nya diperiksa sendiri.
+        assert_eq!(titles(&a.today), tl(&[("hari ini", 0), ("anak due hari ini", 0), ("cucu", 1)]));
+        // Besok sampai `until` (inklusif).
+        assert_eq!(titles(&a.upcoming), tl(&[("besok", 0), ("batas", 0)]));
+        // Hanya ✅ hari ini; batal dan selesai tanpa tanggal tidak masuk.
+        assert_eq!(titles(&a.done), tl(&[("selesai hari ini", 0), ("anak belum", 1)]));
+        // Baris tanpa metadata: tidak ada yang terpilih.
+        assert_eq!(agenda(&parse_tasks(NOTE), "2026-11-17", "2026-11-24", false), Agenda::default());
+        assert_eq!(agenda(&[], "2026-11-17", "2026-11-24", false), Agenda::default());
+    }
+
+    #[test]
+    fn whole_day_note_goes_to_today_or_done() {
+        let a = agenda(&parse_tasks(NOTE), "2026-11-17", "2026-11-24", true);
+        // Semua task daily note hari ini masuk; subtask selesai tetap di bawah induknya.
+        assert_eq!(
+            titles(&a.today),
+            tl(&[("Kerjain laporan IoT", 0), ("Wiring sensor", 1), ("15:00 Rapat lab #icn", 0), ("Bernomor", 0)])
+        );
+        assert_eq!(titles(&a.done), tl(&[("Beli kabel", 0), ("Batal", 0)]));
+        assert!(a.overdue.is_empty() && a.upcoming.is_empty());
+        // Deadline di daily note hari ini tidak memindahkan task ke grup lain.
+        let a = agenda(&parse_tasks("- [ ] a 📅 2026-11-01\n- [ ] b 📅 2026-11-20\n"), "2026-11-17", "2026-11-24", true);
+        assert_eq!(titles(&a.today), tl(&[("a", 0), ("b", 0)]));
     }
 
     /* ----- toggle ----- */

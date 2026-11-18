@@ -258,7 +258,17 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-weight: 500;
 }
 .task .sub { font-size: 11px; color: var(--muted); }
-.task .sub.overdue { color: var(--danger); font-weight: 600; }
+.task .sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.task .sub .overdue { color: var(--danger); font-weight: 600; }
+/* Nama list asal task Tasks.md di tab Today / Upcoming */
+.task .list-label {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.07);
+}
 .task .tag { color: #86c7a3; font-weight: 500; }
 
 .title-edit {
@@ -451,8 +461,9 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
   color: var(--text);
-  background: rgba(255, 95, 82, 0.28);
+  background: rgba(255, 255, 255, 0.1);
 }
+.task-list .group.alert .group-count { background: rgba(255, 95, 82, 0.28); }
 .task-list .group-empty { padding: 3px 8px 6px; font-size: 12px; color: var(--faint); }
 
 /* Judul list di tab All: lebih menonjol, jumlah task terbuka netral. */
