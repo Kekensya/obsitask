@@ -465,7 +465,8 @@ async function refresh(force = false) {
   try {
     const view = await invoke("get_view");
     if (!view.configured) {
-      openSettings(true);
+      state.view = view;
+      openSetup();
       return;
     }
     if (JSON.stringify(view) !== state.lastJson || force) applyView(view);
@@ -849,37 +850,52 @@ function showToast(message, { action, run, ms = 3500, info = false } = {}) {
   toastTimer = setTimeout(hide, ms);
 }
 
-/* ---------- Settings ---------- */
+/* ---------- Config tampilan (tema, zoom, always on top) ---------- */
+
+let display = null; // config terakhir: theme, appearance, zoom, always_on_top
+
+/** Terapkan setting tampilan dari config ke widget. */
+function applyDisplay(cfg) {
+  display = cfg;
+  applyTheme(cfg.theme, cfg.appearance);
+  document.documentElement.style.zoom = String((cfg.zoom || 100) / 100);
+  $("btn-pin").setAttribute("aria-pressed", String(cfg.always_on_top));
+  if (appWindow) appWindow.setAlwaysOnTop(cfg.always_on_top).catch(() => {});
+}
+
+/** Ubah sebagian config lalu simpan; semua window menerima event config-changed. */
+async function patchConfig(patch) {
+  try {
+    const saved = await invoke("update_config", { patch });
+    if (saved) applyDisplay(saved);
+  } catch (err) {
+    showToast(String(err));
+  }
+}
+
+onSystemModeChange(() => display && applyTheme(display.theme, display.appearance));
+if (tauri) {
+  tauri.event.listen("config-changed", (e) => {
+    applyDisplay(e.payload);
+    refresh(true);
+  });
+}
+
+/* ---------- Setup pertama kali (Settings lengkap: window terpisah) ---------- */
 
 const field = {
   vault: $("f-vault"),
   folder: $("f-folder"),
   format: $("f-format"),
-  tasksHeading: $("f-tasks-heading"),
-  heading: $("f-heading"),
-  hide: $("f-hide"),
-  scan: $("f-scan"),
-  upcoming: $("f-upcoming"),
-  tasksFile: $("f-tasks-file"),
-  defaultList: $("f-default-list"),
 };
 
-async function openSettings(firstRun = false) {
+async function openSetup() {
   if (!el.settings.hidden) return;
   closePopover();
   const cfg = await invoke("get_config");
   field.vault.value = cfg.vault_path;
   field.folder.value = cfg.daily_folder;
   field.format.value = cfg.date_format;
-  field.tasksHeading.value = cfg.tasks_heading;
-  field.heading.value = cfg.notes_heading;
-  field.hide.checked = cfg.hide_completed;
-  field.scan.value = cfg.scan_days;
-  field.upcoming.value = cfg.upcoming_days;
-  field.tasksFile.value = cfg.tasks_file;
-  field.defaultList.value = cfg.default_list;
-  $("settings-title").textContent = firstRun ? "Set up ObsiTask" : "Settings";
-  $("btn-cancel").hidden = firstRun;
   el.formError.hidden = true;
   el.settings.hidden = false;
 }
@@ -903,26 +919,16 @@ $("btn-browse").addEventListener("click", async () => {
 });
 field.vault.addEventListener("change", detectDaily);
 
-const clampInt = (value, min, max, fallback) => {
-  const n = Math.round(Number(value));
-  return Number.isFinite(n) && value !== "" ? Math.max(min, Math.min(max, n)) : fallback;
-};
-
 el.form.addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
+    const cfg = await invoke("get_config");
     await invoke("save_config", {
       config: {
+        ...cfg,
         vault_path: field.vault.value.trim(),
         daily_folder: field.folder.value.trim(),
         date_format: field.format.value.trim() || "YYYY-MM-DD",
-        tasks_heading: field.tasksHeading.value.trim() || "## Tasks",
-        notes_heading: field.heading.value.trim() || "## Notes",
-        hide_completed: field.hide.checked,
-        scan_days: clampInt(field.scan.value, 0, 365, 30),
-        upcoming_days: clampInt(field.upcoming.value, 1, 90, 7),
-        tasks_file: field.tasksFile.value.trim() || "Tasks.md",
-        default_list: field.defaultList.value.trim() || "Inbox",
       },
     });
     el.settings.hidden = true;
@@ -933,38 +939,20 @@ el.form.addEventListener("submit", async (e) => {
   }
 });
 
-$("btn-cancel").addEventListener("click", () => (el.settings.hidden = true));
-$("btn-settings").addEventListener("click", () => openSettings(false));
+$("btn-settings").addEventListener("click", () => {
+  if (state.view && !state.view.configured) return openSetup();
+  invoke("open_settings").catch((err) => showToast(String(err)));
+});
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!el.popover.hidden) {
-    const anchor = popoverAnchor;
-    closePopover();
-    if (anchor && anchor.isConnected) anchor.focus();
-  } else if (!el.settings.hidden && !$("btn-cancel").hidden) {
-    el.settings.hidden = true;
-  }
+  if (e.key !== "Escape" || el.popover.hidden) return;
+  const anchor = popoverAnchor;
+  closePopover();
+  if (anchor && anchor.isConnected) anchor.focus();
 });
 
 /* ---------- Window ---------- */
 
-function readPinned() {
-  try {
-    return localStorage.getItem("pinned") !== "false";
-  } catch {
-    return true;
-  }
-}
-
-async function setPinned(pinned) {
-  $("btn-pin").setAttribute("aria-pressed", String(pinned));
-  try {
-    localStorage.setItem("pinned", String(pinned));
-  } catch {}
-  if (appWindow) await appWindow.setAlwaysOnTop(pinned);
-}
-
-$("btn-pin").addEventListener("click", () => setPinned($("btn-pin").getAttribute("aria-pressed") !== "true"));
+$("btn-pin").addEventListener("click", () => patchConfig({ always_on_top: $("btn-pin").getAttribute("aria-pressed") !== "true" }));
 $("btn-close").addEventListener("click", async () => {
   await saveNotes();
   if (appWindow) appWindow.close();
@@ -991,9 +979,22 @@ el.notes.addEventListener("blur", saveNotes);
 
 /* ---------- Start ---------- */
 
-setPinned(readPinned());
 renderDraft();
-refresh(true);
+// Tampilan dulu (tema, zoom, pin), baru data.
+invoke("get_config")
+  .then(async (cfg) => {
+    // Pindahkan pilihan pin lama (localStorage) ke config, sekali saja.
+    const old = readPref("pinned", null);
+    if (old !== null) {
+      try {
+        localStorage.removeItem("pinned");
+      } catch {}
+      if (old !== cfg.always_on_top && cfg.vault_path) return patchConfig({ always_on_top: old });
+    }
+    applyDisplay(cfg);
+  })
+  .catch(() => {})
+  .finally(() => refresh(true));
 setInterval(() => {
   if (el.settings.hidden) refresh();
 }, POLL_MS);
@@ -1055,7 +1056,22 @@ function mockInvoke() {
     { name: "Someday", heading: true, tasks: [] },
   ];
   let notes = "Ide: widget cukup baca daily note.\nTanya dosen soal jadwal demo.";
-  let upcomingDays = 7;
+  let config = {
+    vault_path: "C:\\Vault",
+    daily_folder: "Daily",
+    date_format: "YYYY-MM-DD",
+    tasks_heading: "## Tasks",
+    notes_heading: "## Notes",
+    hide_completed: false,
+    scan_days: 30,
+    upcoming_days: 7,
+    tasks_file: "Tasks.md",
+    default_list: "Inbox",
+    theme: "default",
+    appearance: "system",
+    zoom: 100,
+    always_on_top: true,
+  };
 
   /** Nomor baris: daily note mulai baris 3; Tasks.md tiap heading satu baris. */
   const renumber = () => {
@@ -1090,7 +1106,7 @@ function mockInvoke() {
 
   const view = () => {
     const today = isoToday();
-    const until = isoPlus(upcomingDays);
+    const until = isoPlus(config.upcoming_days);
     const agenda = { overdue: [], today: [], done: [], upcoming: [] };
     for (const l of lists) agendaOf(l.tasks, today, until, false, { source: "tasks", list: l.name }, agenda);
     agendaOf(days[0] || [], today, until, true, { source: "daily", offset: 0 }, agenda);
@@ -1104,7 +1120,7 @@ function mockInvoke() {
       exists: 0 in days,
       notes,
       hide_completed: false,
-      upcoming_days: upcomingDays,
+      upcoming_days: config.upcoming_days,
       agenda,
       lists: lists.map((l) => ({ ...l, tasks: l.tasks.map((t) => ({ ...t })) })),
       default_list: "Inbox",
@@ -1195,21 +1211,17 @@ function mockInvoke() {
         days[0] ||= [];
         return view();
       case "get_config":
-        return {
-          vault_path: "C:\\Vault",
-          daily_folder: "Daily",
-          date_format: "YYYY-MM-DD",
-          tasks_heading: "## Tasks",
-          notes_heading: "## Notes",
-          hide_completed: false,
-          scan_days: 30,
-          upcoming_days: upcomingDays,
-          tasks_file: "Tasks.md",
-          default_list: "Inbox",
-        };
+        return { ...config };
       case "save_config":
-        upcomingDays = args.config.upcoming_days;
-        return null;
+        config = { ...args.config };
+        return { ...config };
+      case "update_config":
+        config = { ...config, ...args.patch };
+        return { ...config };
+      case "check_config":
+        return [{ field: "date_format", level: "info", message: `Today's note: Daily/${isoToday()}.md` }];
+      case "app_info":
+        return { version: "0.1.0 (mock)", config_path: "C:\\Users\\you\\AppData\\Roaming\\com.kekensya.obsitask\\config.json" };
       default:
         return null;
     }

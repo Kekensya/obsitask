@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use chrono::{Duration, Local, NaiveDate};
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
 use config::{Config, DetectedDaily};
@@ -321,8 +321,28 @@ fn get_config(app: AppHandle) -> Result<Config, String> {
     load_config(&app)
 }
 
+/// Satu penulisan config.json pada satu waktu: widget dan Settings bisa
+/// menyimpan hampir bersamaan.
+static CONFIG_LOCK: Mutex<()> = Mutex::new(());
+
+/// Simpan seluruh config (setup pertama kali).
 #[tauri::command]
-fn save_config(app: AppHandle, config: Config) -> Result<(), String> {
+fn save_config(app: AppHandle, config: Config) -> Result<Config, String> {
+    let _guard = CONFIG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    store_config(&app, config)
+}
+
+/// Ubah sebagian setting: field di `patch` diganti, sisanya dibaca ulang dari
+/// disk. Dipakai window Settings dan tombol pin widget.
+#[tauri::command]
+fn update_config(app: AppHandle, patch: serde_json::Map<String, serde_json::Value>) -> Result<Config, String> {
+    let _guard = CONFIG_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let next = config::apply_patch(&load_config(&app)?, &patch)?;
+    store_config(&app, next)
+}
+
+/// Rapikan, simpan, lalu beri tahu semua window.
+fn store_config(app: &AppHandle, config: Config) -> Result<Config, String> {
     let mut cfg = config;
     cfg.vault_path = cfg.vault_path.trim().to_string();
     if !cfg.is_configured() {
@@ -337,7 +357,62 @@ fn save_config(app: AppHandle, config: Config) -> Result<(), String> {
         f => f.to_string(),
     };
     cfg.default_list = cfg.default_list();
-    cfg.save(&config_path(&app)?)
+    cfg.normalize_display();
+    cfg.save(&config_path(app)?)?;
+    // Semua window (widget dan Settings) menerapkan perubahan saat itu juga.
+    let _ = app.emit("config-changed", &cfg);
+    Ok(cfg)
+}
+
+/// Periksa setting vault yang sedang diisi di Settings (belum tentu tersimpan).
+#[tauri::command]
+fn check_config(config: Config) -> Vec<config::Check> {
+    config::check(&config, today())
+}
+
+/// Buka window Settings, atau fokuskan kalau sudah terbuka. Async: membuat
+/// window dari command sinkron bisa macet di Windows.
+#[tauri::command]
+async fn open_settings(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        return win.set_focus().map_err(|e| e.to_string());
+    }
+    WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+        .title("ObsiTask Settings")
+        .inner_size(720.0, 640.0)
+        .min_inner_size(560.0, 460.0)
+        .resizable(true)
+        .decorations(true)
+        .always_on_top(false)
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+struct AppInfo {
+    version: String,
+    config_path: String,
+}
+
+#[tauri::command]
+fn app_info(app: AppHandle) -> Result<AppInfo, String> {
+    Ok(AppInfo {
+        version: app.package_info().version.to_string(),
+        config_path: config_path(&app)?.to_string_lossy().into_owned(),
+    })
+}
+
+/// Buka folder tempat config.json di file explorer.
+#[tauri::command]
+fn open_config_dir(app: AppHandle) -> Result<(), String> {
+    let path = config_path(&app)?;
+    let dir = path.parent().ok_or("No config folder.")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    open_uri(&dir.to_string_lossy())
 }
 
 /// Baca setting plugin Daily notes dari `.obsidian/daily-notes.json`.
@@ -621,6 +696,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            update_config,
+            check_config,
+            open_settings,
+            app_info,
+            open_config_dir,
             detect_daily,
             pick_folder,
             get_view,

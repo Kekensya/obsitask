@@ -4,6 +4,8 @@ Widget desktop kecil untuk task di vault Obsidian: task hari ini, overdue, dan y
 
 Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
 
+Warna tema bawaan (selain Default) dan gaya window Settings diadaptasi dari [Terax](https://github.com/crynta/terax-ai) oleh crynta, lisensi Apache 2.0.
+
 ## Cara kerja
 
 File markdown di vault tetap satu-satunya sumber data: daily note dan satu file list (default `Tasks.md`). Setiap perubahan hanya menulis ulang baris yang dimaksud (line ending dipertahankan, dan ditolak kalau baris itu sudah berubah di Obsidian). Tidak ada database atau file metadata lain.
@@ -47,9 +49,22 @@ Task yang terpilih ke sebuah grup selalu dibawa bersama subtask-nya; subtask men
 - **Notes** — selalu isi di bawah heading `## Notes` di daily note hari ini, di tab mana pun. Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
 - File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul.
 - Tombol hijau membuka daily note hari ini (atau `Tasks.md` di tab All) di Obsidian, dan membuatnya kalau belum ada.
-- Tombol pin = always-on-top. Posisi dan ukuran window diingat.
+- Tombol pin = always-on-top (sama dengan setting "Always on top"). Posisi dan ukuran window diingat.
 
 Keterangan kecil di bawah task: jam di depan teks (`- [ ] 15:00 Rapat`), deadline (merah kalau sudah lewat), daily note asal, dan nama list. Warna lingkaran checkbox menandai prioritas.
+
+### Settings dan tema
+
+- Tombol roda gigi membuka **window Settings** terpisah (atau memfokuskannya kalau sudah terbuka). Setiap perubahan langsung disimpan ke `config.json` dan langsung terlihat di widget — tidak ada tombol Save. Setup pertama kali (pilih vault) tetap di dalam widget.
+  - **General** — Appearance (System / Light / Dark; System mengikuti mode terang/gelap Windows saat itu juga), zoom widget 80–150%, always on top.
+  - **Vault** — folder vault (Browse), folder dan format daily note, heading task dan Notes, file list; tombol "Detect from Obsidian" menyalin folder + format dari plugin Daily notes. Baris yang bermasalah diberi peringatan (folder tidak ada, bukan vault, format tanpa tahun/bulan/hari); vault yang tidak ada tidak disimpan.
+  - **Tasks** — sembunyikan task selesai, list default, Upcoming days, look-back days.
+  - **Themes** — kartu pratinjau setiap tema; varian yang tampil mengikuti Appearance. Tema berlabel "Dark only" / "Light only" selalu memakai varian itu. Window Settings sendiri ikut memakai tema yang dipilih.
+  - **About** — versi, lokasi config, tombol buka folder config, kredit.
+- Penyimpanan dari Settings dan dari tombol pin hanya mengubah field yang disentuh (dibaca ulang dari disk dan dikunci), jadi dua window tidak saling menimpa.
+- **Tema** dipasang lewat `data-theme` dan `data-mode` di `<html>`. Semua warna di CSS lewat variabel (`src/theme.css`); data tema ada di `src/themes.js`. "Default" adalah tampilan asli ObsiTask (dark) plus varian light-nya.
+- Tema lain memakai **nilai warna dari [Terax](https://github.com/crynta/terax-ai)** (Apache License 2.0); hanya nilai warnanya yang diambil, tanpa kode. Pemetaannya: background → panel, card → kartu, cardForeground → teks, mutedForeground → teks redup, border → garis, secondary → kotak input/tombol bulat/segmented, accent → sorotan baris, primary → tombol hijau/checkbox/tab/fokus, destructive → overdue/toast error, terminal ansi[1]/[3]/[4] → prioritas high/medium/low, ansi[6] → tag, terminal selection → seleksi teks.
+- **Kontras**: token yang di bawah WCAG (teks 4.5:1, lingkaran prioritas dan ikon 3:1, diukur di atas kartu) digeser sedikit ke arah warna teks tema itu sampai lolos; daftar token yang diubah tercatat di `adjusted` pada `themes.js`. Default dark sengaja tidak diubah.
 
 ## Build di Windows
 
@@ -68,10 +83,13 @@ Saat pertama dijalankan, pilih folder vault. Folder dan format daily note diisi 
 ## Struktur
 
 ```
-src/                  frontend widget
-  index.html
-  style.css           warna & font ada di :root paling atas
+src/                  frontend
+  index.html          widget (+ setup pertama kali)
   main.js             buka index.html langsung di browser = mode contoh data
+  style.css           tata letak widget; semua warna lewat variabel
+  theme.css           token warna + warna turunan (dipakai widget dan Settings)
+  themes.js           data tema (Default + warna Terax) dan applyTheme()
+  settings.html       window Settings (settings.js, settings.css); bisa dibuka langsung di browser
 src-tauri/
   src/tasks.rs        parser + penulis task/notes (logika murni, ada unit test)
   src/scan.rs         cache parse file (mtime + ukuran): daily note lama dan Tasks.md
@@ -93,7 +111,8 @@ Config tersimpan di `%APPDATA%\com.kekensya.obsitask\config.json`.
 - Memindahkan task dari `Tasks.md` kembali ke daily note.
 - Recurring task, reminder/notifikasi, pomodoro, smart list/filter kustom, tag view, arsip task selesai, drag-and-drop reorder, sinkronisasi.
 - Prioritas `🔺` / `⏬` plugin Tasks tidak dikelola (dibiarkan apa adanya di baris).
-- Efek blur ke desktop (acrylic/mica). Panel sekarang semi-transparan biasa.
+- Efek blur ke desktop (acrylic/mica) dan gambar latar. Panel sekarang semi-transparan biasa.
+- Membuat atau mengedit tema sendiri dari widget, dan shortcut keyboard yang bisa diatur.
 - Tray icon dan autostart saat Windows menyala.
 
 Untuk mencoba terhadap vault percobaan tanpa menyentuh config asli, set `OBSITASK_CONFIG` ke path file config lain sebelum menjalankan.

@@ -1,0 +1,61 @@
+/*
+ * Token warna bersama untuk widget dan window Settings.
+ * Nilai di :root = tema Default (dark), dipakai sebelum themes.js berjalan.
+ * themes.js menimpa token dasar lewat :root[data-theme][data-mode]; token
+ * turunan di bawah dihitung ulang otomatis dari token dasar.
+ */
+:root {
+  /* Token dasar (lihat themes.js) */
+  --bg: rgb(40, 38, 37);
+  --card: rgba(255, 255, 255, 0.065);
+  --text: #f3f0ea;
+  --muted: #a9a39b;
+  --border: rgba(255, 255, 255, 0.08);
+  --secondary: rgba(255, 255, 255, 0.065);
+  --hover: rgba(255, 255, 255, 0.05);
+  --primary: #2f9461;
+  --on-primary: #ffffff;
+  --danger: #ff5f52;
+  --p-high: #ff6b5e;
+  --p-medium: #f0b445;
+  --p-low: #62a8f2;
+  --tag: #86c7a3;
+  --selection: rgba(47, 148, 97, 0.35);
+
+  /* Token opsional: kalau tema tidak mengisinya, diturunkan dari token dasar */
+  --faint: color-mix(in srgb, var(--muted) 85%, transparent);
+  --raised: var(--card);
+  --primary-text: var(--primary);
+  --ring: color-mix(in srgb, var(--text) 78%, transparent);
+
+  /* Turunan */
+  --panel: color-mix(in srgb, var(--bg) 93%, transparent);
+  --well: var(--secondary);
+  --hover-strong: color-mix(in srgb, var(--text) 12%, transparent);
+  --chip: color-mix(in srgb, var(--text) 8%, transparent);
+  --primary-soft: color-mix(in srgb, var(--primary) 26%, transparent);
+  --primary-line: color-mix(in srgb, var(--primary) 65%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 13%, transparent);
+  --danger-count: color-mix(in srgb, var(--danger) 30%, transparent);
+  --danger-bg: color-mix(in srgb, var(--danger) 62%, #000);
+  --on-danger: #ffffff;
+  --scroll: color-mix(in srgb, var(--text) 16%, transparent);
+  --scroll-hover: color-mix(in srgb, var(--text) 28%, transparent);
+  --shadow: rgba(0, 0, 0, 0.45);
+
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  color-scheme: dark;
+}
+
+:root[data-mode="light"] {
+  --shadow: rgba(40, 32, 24, 0.16);
+  color-scheme: light;
+}
+
+::selection { background: var(--selection); }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover); }

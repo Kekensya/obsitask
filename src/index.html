@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ObsiTask</title>
+  <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="style.css" />
+  <script src="themes.js"></script>
 </head>
 <body>
   <div class="panel" id="panel">
@@ -78,10 +80,10 @@
   <!-- Popover kecil: prioritas, deadline, hapus (isinya dibuat di main.js) -->
   <div class="popover" id="popover" hidden></div>
 
-  <!-- Settings / setup pertama kali -->
+  <!-- Setup pertama kali (Settings lengkap ada di window terpisah: settings.html) -->
   <div class="overlay" id="settings" hidden>
     <form class="sheet" id="settings-form">
-      <h2 id="settings-title">Settings</h2>
+      <h2>Set up ObsiTask</h2>
 
       <label>Obsidian vault folder
         <div class="row">
@@ -98,39 +100,12 @@
         <input id="f-format" type="text" placeholder="YYYY-MM-DD" />
       </label>
 
-      <label>Tasks file <small>permanent lists live here; each "## Name" heading is a list</small>
-        <input id="f-tasks-file" type="text" placeholder="Tasks.md" />
-      </label>
-
-      <label>Default list <small>new tasks from the widget go here</small>
-        <input id="f-default-list" type="text" placeholder="Inbox" />
-      </label>
-
-      <label>Tasks heading <small>used when restoring a deleted daily-note task</small>
-        <input id="f-tasks-heading" type="text" placeholder="## Tasks" />
-      </label>
-
-      <label>Notes heading <small>the Notes box reads and writes under this heading</small>
-        <input id="f-heading" type="text" placeholder="## Notes" />
-      </label>
-
-      <label>Upcoming days <small>how far ahead the Upcoming tab looks, starting tomorrow</small>
-        <input id="f-upcoming" type="number" min="1" max="90" step="1" placeholder="7" />
-      </label>
-
-      <label>Look back for due tasks <small>days of older daily notes to scan for overdue tasks; 0 = off</small>
-        <input id="f-scan" type="number" min="0" max="365" step="1" placeholder="30" />
-      </label>
-
-      <label class="check">
-        <input id="f-hide" type="checkbox" /> Hide completed tasks
-      </label>
+      <p class="hint">Everything else (lists, themes, zoom, …) is in Settings later.</p>
 
       <p class="form-error" id="form-error" hidden></p>
 
       <div class="actions">
-        <button type="button" class="ghost-btn" id="btn-cancel">Cancel</button>
-        <button type="submit" class="primary-btn">Save</button>
+        <button type="submit" class="primary-btn">Start</button>
       </div>
     </form>
   </div>
