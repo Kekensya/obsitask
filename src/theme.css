@@ -42,21 +42,31 @@
   --ring: color-mix(in srgb, var(--text) 78%, transparent);
   --sidebar: var(--card);
 
+  /* Lapisan tint (lihat themes.js): kartu = --card-tint dengan alpha
+     --card-alpha di atas panel; kolom = --well-tint dengan alpha --well-alpha
+     di atas kartu. Di opacity 100% hasilnya tepat --card / --secondary. */
+  --card-tint: rgb(253 253 253);
+  --card-alpha: 0.078431;
+  --well-tint: rgb(251 251 251);
+  --well-alpha: 0.043137;
+
   /* Opacity latar widget (Settings > General, 0-100%; diset dari main.js).
-     Semua LATAR di widget memakai token --panel / --well / --f-* di bawah,
-     yaitu warna tema dengan alpha dikali nilai ini. Teks, ikon, checkbox,
-     garis bawah tab, tombol aksen, dan scrollbar memakai warna tema biasa,
-     jadi tetap penuh. Di window Settings nilainya tetap 100% (= warna asli). */
+     Hanya panel yang memakai warna dasarnya (alpha = opacity). Kartu dan kolom
+     adalah lapisan tint tipis di atasnya dengan alpha x opacity, jadi seluruh
+     widget memudar seragam: kartu tetap sedikit lebih terang dari panel (tema
+     gelap) di opacity berapa pun, tidak pernah lebih gelap atau lebih keruh.
+     Teks, ikon, checkbox, aksen (garis tab, badge, tombol +), dan scrollbar
+     memakai warna tema biasa, jadi tetap penuh. Di window Settings nilainya
+     tetap 100% (= warna asli). */
   --opacity: 100%;
 
   /* Latar yang ikut opacity */
   --panel: color-mix(in srgb, var(--bg) var(--opacity), transparent);
-  --f-card: color-mix(in srgb, var(--card) var(--opacity), transparent); /* kartu task / Notes, kotak hari */
-  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent); /* kolom di kartu: bar tambah, kotak Notes, input, chip menu */
+  --f-card: color-mix(in srgb, var(--card-tint) calc(var(--card-alpha) * var(--opacity)), transparent); /* kartu task / Notes, kotak hari */
+  --well: color-mix(in srgb, var(--well-tint) calc(var(--well-alpha) * var(--opacity)), transparent); /* kolom di kartu: bar tambah, kotak Notes, input, chip menu */
   --f-hover: color-mix(in srgb, var(--hover) var(--opacity), transparent); /* hover baris, list terbuka */
   --f-hover-strong: color-mix(in srgb, var(--hover-strong) var(--opacity), transparent); /* hover tombol */
   --f-primary-soft: color-mix(in srgb, var(--primary-soft) var(--opacity), transparent); /* pilihan aktif */
-  --f-primary: color-mix(in srgb, var(--primary) var(--opacity), transparent); /* badge Today */
   --f-raised: color-mix(in srgb, var(--raised) var(--opacity), transparent); /* popover, saran ~list */
   --f-danger-soft: color-mix(in srgb, var(--danger-soft) var(--opacity), transparent);
   --f-danger-bg: color-mix(in srgb, var(--danger-bg) var(--opacity), transparent); /* toast error */
@@ -91,6 +101,19 @@
 
 ::selection { background: var(--selection); }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--scroll-hover); }
+/* Scrollbar di DALAM kartu: jalur 14px transparan, batang 6px (border
+   transparan 4px di tiap sisi), jadi batangnya 4px dari tepi kanan. Margin
+   jalur 10px menjauhkannya dari sudut bulat. Batangnya selalu terlihat
+   (redup): WebView2 tidak menggambar ulang batang saat :hover induknya
+   berubah, jadi "hanya saat hover" tidak bisa diandalkan. */
+::-webkit-scrollbar { width: 14px; height: 14px; background: transparent; }
+::-webkit-scrollbar-track { background: transparent; margin: 10px 0; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  background-color: var(--scroll);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 7px;
+}
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--scroll-hover); }

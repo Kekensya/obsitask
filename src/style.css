@@ -164,10 +164,9 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 .tabs button[aria-selected="true"] .badge {
-  /* Angka gelap/terang di atas aksen pekat; begitu latarnya memudar (< 80%)
-     pakai warna teks biasa supaya angkanya tetap terbaca. */
-  color: color-mix(in srgb, var(--on-primary) clamp(0%, (var(--opacity) - 79.5%) * 1000, 100%), var(--text));
-  background: var(--f-primary);
+  /* Aksen tidak ikut opacity, jadi angkanya selalu di atas aksen pekat. */
+  color: var(--on-primary);
+  background: var(--primary);
   border-color: var(--primary);
 }
 
@@ -229,8 +228,10 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .task-list {
   list-style: none;
   margin: 0;
-  padding: 2px 8px 6px 10px;
+  padding: 2px 0 6px 10px;
   overflow-y: auto;
+  /* Ruang 14px di kanan selalu dicadangkan untuk scrollbar (batang 6px, 4px dari tepi kartu). */
+  scrollbar-gutter: stable;
   flex: 1 1 0;
   min-height: 0;
 }
@@ -252,6 +253,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   flex: none;
   width: 18px;
   height: 18px;
+  padding: 0; /* tanpa ini padding bawaan <button> (1px 6px) menggeser centang 2px ke kanan */
   margin-top: 8px;
   display: grid;
   place-items: center;
@@ -263,14 +265,17 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   transition: background 0.15s, box-shadow 0.15s;
 }
 .task .box:hover { background: var(--f-hover-strong); }
-.task .box svg { width: 12px; height: 12px; stroke-width: 3; opacity: 0; }
+/* Centang 10px, garis 2.4 (satuan viewBox 24), ujung bulat; bentuknya diimbangi supaya pusat visualnya tepat di tengah. */
+.task .box svg { width: 10px; height: 10px; stroke-width: 2.4; opacity: 0; }
 .task.p-high .box { --box-ring: var(--p-high); }
 .task.p-medium .box { --box-ring: var(--p-medium); }
 .task.p-low .box { --box-ring: var(--p-low); }
 .task.done .box { background: var(--primary); --box-ring: var(--primary); }
 .task.done .box svg { opacity: 1; }
 /* Dibatalkan ([-]): garis abu-abu dengan strip. */
-.task.cancelled .box { --box-ring: var(--faint); }
+.task.cancelled .box { --box-ring: var(--ring); }
+/* Centang dan strip di sel grid yang sama, jadi keduanya tepat di tengah lingkaran. */
+.task .box > svg, .task .box::after { grid-area: 1 / 1; }
 .task.cancelled .box::after {
   content: "";
   width: 8px;
@@ -379,8 +384,10 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 
 /* ---------- Tab All: satu blok per list ---------- */
 
-.list-block { border-radius: 12px; margin-bottom: 2px; }
-.list-block.open { background: var(--f-hover); padding-bottom: 6px; }
+/* Satu kartu untuk semua list: list tidak punya latar/kotak sendiri, hanya dipisah garis tipis. */
+.list-block + .list-block { border-top: 1px solid var(--sep); }
+.list-block.open { padding-bottom: 6px; }
+.list-block .task:last-child > .main { border-bottom-color: transparent; }
 .list-head { display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 3px 0 6px; }
 .list-toggle {
   flex: 1;
