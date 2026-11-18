@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ObsiTask</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="panel" id="panel">
+    <!-- Bar atas: area kosongnya dipakai untuk menggeser widget -->
+    <header class="topbar" data-tauri-drag-region>
+      <div class="bar-side" data-tauri-drag-region>
+        <button class="icon-btn" id="btn-close" title="Close" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        <button class="icon-btn" id="btn-pin" title="Always on top" aria-label="Always on top" aria-pressed="true">
+          <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5" /></svg>
+        </button>
+      </div>
+
+      <div class="segmented" role="tablist" aria-label="Day">
+        <button role="tab" data-offset="-1" aria-selected="false">Yesterday</button>
+        <button role="tab" data-offset="0" aria-selected="true">Today</button>
+        <button role="tab" data-offset="1" aria-selected="false">Tomorrow</button>
+      </div>
+
+      <div class="bar-side end" data-tauri-drag-region>
+        <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 00-2.6-1.5L14 2.5h-4l-.5 2.5a7.5 7.5 0 00-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 000 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 002.6 1.5l.5 2.5h4l.5-2.5a7.5 7.5 0 002.6-1.5l2.3.9 2-3.4-2-1.5z" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <h1 class="date" id="date" data-tauri-drag-region></h1>
+
+    <!-- Daftar task -->
+    <section class="card tasks-card">
+      <div class="card-head">
+        <svg class="card-icon" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1.2" /><circle cx="4.5" cy="12" r="1.2" /><circle cx="4.5" cy="18" r="1.2" /></svg>
+        <h2>Tasks</h2>
+        <span class="count" id="count"></span>
+        <button class="accent-btn" id="btn-open" title="Open daily note in Obsidian" aria-label="Open daily note in Obsidian">
+          <svg viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 00-1 1v11a1 1 0 001 1h11a1 1 0 001-1v-5" /></svg>
+        </button>
+      </div>
+      <ul class="task-list" id="tasks"></ul>
+      <p class="empty" id="empty" hidden></p>
+    </section>
+
+    <!-- Catatan kecil -->
+    <section class="card notes-card">
+      <div class="card-head">
+        <svg class="card-icon" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3" /></svg>
+        <h2>Notes</h2>
+        <span class="status" id="notes-status"></span>
+      </div>
+      <textarea id="notes" spellcheck="false" placeholder="Jot something down…"></textarea>
+    </section>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <!-- Settings / setup pertama kali -->
+  <div class="overlay" id="settings" hidden>
+    <form class="sheet" id="settings-form">
+      <h2 id="settings-title">Settings</h2>
+
+      <label>Obsidian vault folder
+        <div class="row">
+          <input id="f-vault" type="text" placeholder="C:\Users\you\Documents\Vault" required />
+          <button type="button" class="ghost-btn" id="btn-browse">Browse</button>
+        </div>
+      </label>
+
+      <label>Daily notes folder <small>inside the vault, blank = vault root</small>
+        <input id="f-folder" type="text" placeholder="Daily" />
+      </label>
+
+      <label>Date format <small>same as in Obsidian's Daily notes settings</small>
+        <input id="f-format" type="text" placeholder="YYYY-MM-DD" />
+      </label>
+
+      <label>Notes heading <small>the Notes box reads and writes under this heading</small>
+        <input id="f-heading" type="text" placeholder="## Notes" />
+      </label>
+
+      <label class="check">
+        <input id="f-hide" type="checkbox" /> Hide completed tasks
+      </label>
+
+      <p class="form-error" id="form-error" hidden></p>
+
+      <div class="actions">
+        <button type="button" class="ghost-btn" id="btn-cancel">Cancel</button>
+        <button type="submit" class="primary-btn">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
