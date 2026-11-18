@@ -44,6 +44,19 @@
           <svg viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 00-1 1v11a1 1 0 001 1h11a1 1 0 001-1v-5" /></svg>
         </button>
       </div>
+      <!-- Tambah task: Enter menyimpan; !high / !med / !low dan @today / @tomorrow / @YYYY-MM-DD dikenali -->
+      <form class="add-bar" id="add-form" autocomplete="off">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        <input id="add-input" type="text" placeholder="Add a task…" spellcheck="false" aria-label="Add a task"
+               title="Enter to add. Try: !high !med !low, @today @tomorrow @2026-12-31" />
+        <button type="button" class="mini-btn p-none" id="add-priority" title="Priority" aria-label="Priority" aria-haspopup="true">
+          <svg viewBox="0 0 24 24"><path d="M5 21V4" /><path d="M5 4h12l-2.5 4 2.5 4H5" /></svg>
+        </button>
+        <button type="button" class="mini-btn" id="add-due" title="Due date" aria-label="Due date" aria-haspopup="true">
+          <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /></svg>
+          <span id="add-due-label"></span>
+        </button>
+      </form>
       <ul class="task-list" id="tasks"></ul>
       <p class="empty" id="empty" hidden></p>
     </section>
@@ -58,8 +71,11 @@
       <textarea id="notes" spellcheck="false" placeholder="Jot something down…"></textarea>
     </section>
 
-    <div class="toast" id="toast" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
   </div>
+
+  <!-- Popover kecil: prioritas, deadline, hapus (isinya dibuat di main.js) -->
+  <div class="popover" id="popover" hidden></div>
 
   <!-- Settings / setup pertama kali -->
   <div class="overlay" id="settings" hidden>
@@ -79,6 +95,10 @@
 
       <label>Date format <small>same as in Obsidian's Daily notes settings</small>
         <input id="f-format" type="text" placeholder="YYYY-MM-DD" />
+      </label>
+
+      <label>Tasks heading <small>new tasks are added under this heading</small>
+        <input id="f-tasks-heading" type="text" placeholder="## Tasks" />
       </label>
 
       <label>Notes heading <small>the Notes box reads and writes under this heading</small>

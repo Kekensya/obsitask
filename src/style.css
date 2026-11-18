@@ -9,6 +9,9 @@
   --accent: #2f9461;
   --accent-soft: rgba(47, 148, 97, 0.28);
   --danger: #ff5f52;
+  --p-high: #ff6b5e;
+  --p-medium: #f0b445;
+  --p-low: #62a8f2;
   --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -188,34 +191,54 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .task {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 5px 4px;
+  gap: 5px;
+  padding: 2px 2px 2px 4px;
   border-radius: 8px;
-  cursor: pointer;
 }
-.task:hover { background: rgba(255, 255, 255, 0.05); }
+.task:hover, .task:focus-within { background: rgba(255, 255, 255, 0.05); }
 
+/* Lingkaran checkbox; warnanya menandai prioritas. */
 .task .box {
   flex: none;
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border: 1.6px solid #d9d4cc;
+  border-radius: 50%;
+  color: #fff;
+  --ring: #d9d4cc;
+}
+.task .box::before {
+  content: "";
+  grid-area: 1 / 1;
+  width: 16px;
+  height: 16px;
+  border: 1.6px solid var(--ring);
   border-radius: 50%;
   transition: background 0.15s, border-color 0.15s;
 }
-.task .box svg { width: 10px; height: 10px; stroke-width: 3; opacity: 0; }
-.task.done .box { background: var(--accent); border-color: var(--accent); }
+.task .box:hover::before { background: rgba(255, 255, 255, 0.12); }
+.task .box svg { grid-area: 1 / 1; width: 10px; height: 10px; stroke-width: 3; opacity: 0; }
+.task.p-high .box { --ring: var(--p-high); }
+.task.p-medium .box { --ring: var(--p-medium); }
+.task.p-low .box { --ring: var(--p-low); }
+.task.p-high .box::before, .task.p-medium .box::before, .task.p-low .box::before {
+  border-width: 2px;
+  background: color-mix(in srgb, var(--ring) 16%, transparent);
+}
+.task.done .box::before { background: var(--accent); border-color: var(--accent); border-width: 1.6px; }
 .task.done .box svg { opacity: 1; }
-.task.cancelled .box { border-color: var(--faint); }
+.task.cancelled .box { --ring: var(--faint); }
+.task.cancelled .box::before { background: none; border-width: 1.6px; }
 
-.task .body { min-width: 0; flex: 1; }
+.task .body { min-width: 0; flex: 1; padding: 3px 0; }
 .task .title {
   font-weight: 600;
   overflow-wrap: anywhere;
+  border-radius: 4px;
+  cursor: text;
 }
+.task .untitled { color: var(--faint); font-weight: 500; font-style: italic; }
 .task.done .title, .task.cancelled .title {
   color: var(--faint);
   text-decoration: line-through;
@@ -224,6 +247,163 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .task .sub { font-size: 11px; color: var(--muted); }
 .task .sub.overdue { color: var(--danger); font-weight: 600; }
 .task .tag { color: #86c7a3; font-weight: 500; }
+
+.title-edit {
+  flex: 1;
+  width: 100%;
+  margin: -2px 0 -2px -4px;
+  padding: 1px 3px;
+  font: 600 13px/1.4 var(--sans);
+  color: var(--text);
+  background: var(--well);
+  border: 1px solid rgba(47, 148, 97, 0.6);
+  border-radius: 5px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.title-edit:focus { outline: none; }
+
+/* Tombol opsi (prioritas, deadline, hapus): muncul saat baris disorot. */
+.task .more {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.task .more svg { fill: currentColor; }
+.task:hover .more, .task:focus-within .more, .task .more[aria-expanded="true"] { opacity: 1; }
+.task .more:hover, .task .more[aria-expanded="true"] { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+
+/* ---------- Add a task ---------- */
+
+.add-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding: 0 3px 0 9px;
+  background: var(--well);
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+.add-bar:focus-within { border-color: rgba(47, 148, 97, 0.6); }
+.add-bar > svg { flex: none; width: 13px; height: 13px; color: var(--faint); stroke-width: 2.2; }
+.add-bar input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 6px;
+  font: 13px var(--sans);
+  color: var(--text);
+  background: none;
+  border: 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.add-bar input::placeholder { color: var(--faint); }
+.add-bar input:focus { outline: none; }
+
+.mini-btn {
+  flex: none;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.mini-btn:hover, .mini-btn[aria-expanded="true"] { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+.mini-btn svg { width: 14px; height: 14px; }
+.mini-btn.p-high { color: var(--p-high); }
+.mini-btn.p-medium { color: var(--p-medium); }
+.mini-btn.p-low { color: var(--p-low); }
+.mini-btn.p-high svg, .mini-btn.p-medium svg, .mini-btn.p-low svg { fill: currentColor; }
+.mini-btn.set { color: #7fd6a6; background: var(--accent-soft); }
+
+/* ---------- Popover ---------- */
+
+.popover {
+  position: fixed;
+  z-index: 5;
+  width: 232px;
+  max-width: calc(100% - 16px);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #2f2c2b;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 11px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.pop-section { display: flex; flex-direction: column; gap: 5px; }
+.pop-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.pop-row { display: flex; gap: 4px; }
+.pop-chip {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+.pop-chip:hover { background: rgba(255, 255, 255, 0.14); color: var(--text); }
+.pop-chip[aria-pressed="true"] { color: var(--text); background: var(--accent-soft); border-color: rgba(47, 148, 97, 0.7); }
+.pop-chip .dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--faint); }
+.pop-chip.p-high .dot { background: var(--p-high); border-color: var(--p-high); }
+.pop-chip.p-medium .dot { background: var(--p-medium); border-color: var(--p-medium); }
+.pop-chip.p-low .dot { background: var(--p-low); border-color: var(--p-low); }
+.pop-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  font: 12px var(--sans);
+  color: var(--text);
+  color-scheme: dark;
+  background: var(--well);
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+}
+.pop-danger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 1px;
+  padding: 7px 6px 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  border-top: 1px solid var(--card-border);
+  border-radius: 0 0 7px 7px;
+}
+.pop-danger:hover { background: rgba(255, 95, 82, 0.12); }
+.pop-danger span { display: grid; }
+.pop-danger svg { width: 14px; height: 14px; }
 
 .empty {
   margin: auto;
@@ -271,7 +451,18 @@ textarea:focus { outline: none; border-color: rgba(47, 148, 97, 0.6); }
   color: #fff;
   background: rgba(190, 60, 50, 0.96);
   border-radius: 9px;
+  z-index: 6;
 }
+/* Pesan netral dengan tombol aksi (mis. "Task deleted · Undo"). */
+.toast.info {
+  white-space: nowrap;
+  color: var(--text);
+  background: #3a3736;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.toast button { margin-left: 10px; font-weight: 700; color: #7fd6a6; padding: 0 2px; }
+.toast button:hover { text-decoration: underline; }
 
 /* ---------- Settings ---------- */
 

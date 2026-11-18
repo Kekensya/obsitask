@@ -13,6 +13,8 @@ pub struct Config {
     pub date_format: String,
     /// Heading yang isinya ditampilkan di bagian Notes widget.
     pub notes_heading: String,
+    /// Heading tempat task baru dari widget ditambahkan.
+    pub tasks_heading: String,
     /// Sembunyikan task yang sudah dicentang.
     pub hide_completed: bool,
 }
@@ -24,6 +26,7 @@ impl Default for Config {
             daily_folder: String::new(),
             date_format: "YYYY-MM-DD".to_string(),
             notes_heading: "## Notes".to_string(),
+            tasks_heading: "## Tasks".to_string(),
             hide_completed: false,
         }
     }

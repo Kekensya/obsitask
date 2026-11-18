@@ -6,14 +6,20 @@ Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
 
 ## Cara kerja
 
-- **Tasks** — semua baris checkbox (`- [ ]`, `- [x]`) di daily note hari yang dipilih. Klik untuk mencentang; hanya karakter di dalam `[ ]` pada baris itu yang ditulis ulang.
+- **Tasks** — semua baris checkbox (`- [ ]`, `- [x]`) di daily note hari yang dipilih. File markdown tetap satu-satunya sumber data; setiap perubahan hanya menulis ulang baris yang dimaksud (line ending dipertahankan, dan ditolak kalau baris itu sudah berubah di Obsidian).
+  - **Centang** lewat lingkaran checkbox. `✅ YYYY-MM-DD` ditambahkan saat dicentang dan dihapus saat dibatalkan.
+  - **Tambah** lewat kotak "Add a task…" + Enter. Task ditulis sebagai `- [ ] ...` di akhir daftar di bawah heading task (default `## Tasks`, bisa diatur di Settings). Heading ditambahkan kalau belum ada; daily note dibuat kalau belum ada (tanpa template Obsidian).
+  - **Quick-add**: `!high` / `!med` / `!low` untuk prioritas, `@today` / `@tomorrow` / `@YYYY-MM-DD` untuk deadline. Atau pakai tombol bendera dan kalender di kotak yang sama (pilihan tombol menang atas token).
+  - **Edit**: klik judul untuk mengubah teks (Enter simpan, Esc batal; token quick-add juga berlaku). Tombol `⋯` atau klik kanan membuka menu prioritas, deadline, dan hapus. Menghapus task ikut menghapus subtask-nya, dan bisa di-Undo beberapa detik.
+  - **Metadata** memakai format emoji plugin Obsidian Tasks di akhir baris: `⏫` high, `🔼` medium, `🔽` low, `📅 YYYY-MM-DD` deadline, `✅ YYYY-MM-DD` selesai. Field Tasks lain (`➕`, `🛫`, `⏳`, …) dan block id dibiarkan utuh.
+  - **Urutan tampil**: belum selesai dulu, lalu prioritas, lalu deadline; subtask tetap di bawah induknya. Urutan baris di file tidak pernah diubah.
 - **Notes** — isi di bawah heading `## Notes` di daily note yang sama. Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
 - **Yesterday / Today / Tomorrow** — pindah ke daily note kemarin atau besok.
 - File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul.
 - Tombol hijau membuka daily note itu di Obsidian (dan membuatnya kalau belum ada).
 - Tombol pin = always-on-top. Posisi dan ukuran window diingat.
 
-Keterangan kecil di bawah task diambil dari teksnya: jam di depan (`- [ ] 15:00 Rapat`) dan due date gaya plugin Tasks (`📅 2026-11-18`, merah kalau sudah lewat).
+Keterangan kecil di bawah task: jam di depan teks (`- [ ] 15:00 Rapat`) dan deadline (merah kalau sudah lewat). Warna lingkaran checkbox menandai prioritas.
 
 ## Build di Windows
 
@@ -37,7 +43,7 @@ src/                  frontend widget
   style.css           warna & font ada di :root paling atas
   main.js             buka index.html langsung di browser = mode contoh data
 src-tauri/
-  src/tasks.rs        parser checkbox + notes (logika murni, ada unit test)
+  src/tasks.rs        parser + penulis task/notes (logika murni, ada unit test)
   src/config.rs       config + konversi format tanggal Obsidian
   src/lib.rs          command Tauri
   tauri.conf.json     ukuran & sifat window
@@ -49,6 +55,10 @@ Config tersimpan di `%APPDATA%\com.kekensya.obsitask\config.json`.
 
 ## Belum ada (sengaja)
 
-- Menambah / mengedit teks task dari widget — lakukan di Obsidian.
+- Task ber-deadline dari daily note hari lain belum muncul pada hari jatuh temponya (bagian "Overdue & due" — fase berikutnya).
+- Recurring task, reminder/notifikasi, pomodoro, project/tag manager, drag-and-drop reorder, sinkronisasi.
+- Prioritas `🔺` / `⏬` plugin Tasks tidak dikelola (dibiarkan apa adanya di baris).
 - Efek blur ke desktop (acrylic/mica). Panel sekarang semi-transparan biasa.
 - Tray icon dan autostart saat Windows menyala.
+
+Untuk mencoba terhadap vault percobaan tanpa menyentuh config asli, set `OBSITASK_CONFIG` ke path file config lain sebelum menjalankan.
