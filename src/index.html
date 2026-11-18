@@ -41,39 +41,50 @@
     <!-- Strip 7 hari (hanya di Upcoming) -->
     <div class="week" id="week" role="group" aria-label="Filter by day" hidden></div>
 
-    <!-- Daftar task -->
-    <ul class="task-list" id="tasks"></ul>
-    <p class="empty" id="empty" hidden></p>
+    <!-- Kartu task: bar tambah task (Today / Upcoming) di atas, lalu daftar -->
+    <section class="card task-card" id="task-card">
+      <div class="add-wrap" id="add-wrap">
+        <!-- Quick-add: Enter atau + menyimpan; ~list !prio @date dikenali -->
+        <form class="add-bar" id="add-form" autocomplete="off">
+          <span class="add-prefix" aria-hidden="true">›</span>
+          <div class="add-field">
+            <div class="add-mirror" id="add-mirror" aria-hidden="true"></div>
+            <input id="add-input" type="text" placeholder="Add a task   ~list  !prio  @date" spellcheck="false" aria-label="Add a task"
+                   title="Enter to add. Try: ~list, !high !med !low, @today @tomorrow @2026-12-31" />
+          </div>
+          <button type="button" class="mini-btn p-none" id="add-priority" title="Priority" aria-label="Priority" aria-haspopup="true">
+            <svg viewBox="0 0 24 24"><path d="M5 21V4" /><path d="M5 4h12l-2.5 4 2.5 4H5" /></svg>
+          </button>
+          <button type="button" class="mini-btn" id="add-due" title="Due date" aria-label="Due date" aria-haspopup="true">
+            <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /></svg>
+            <span id="add-due-label"></span>
+          </button>
+          <button type="submit" class="add-go" id="add-go" title="Add task" aria-label="Add task">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </form>
+        <!-- Saran list saat mengetik "~": membuka ke bawah, di bawah bar -->
+        <div class="suggest" id="suggest" role="listbox" aria-label="Lists" hidden></div>
+        <div class="add-preview" id="add-preview" aria-live="polite" hidden></div>
+      </div>
+      <ul class="task-list" id="tasks"></ul>
+      <p class="empty" id="empty" hidden></p>
+    </section>
 
-    <!-- Quick-add: Enter menyimpan; ~list !prio @date dikenali -->
-    <div class="add-wrap">
-      <div class="suggest" id="suggest" role="listbox" aria-label="Lists" hidden></div>
-      <form class="add-bar" id="add-form" autocomplete="off">
-        <span class="add-prefix" aria-hidden="true">›</span>
-        <div class="add-field">
-          <div class="add-mirror" id="add-mirror" aria-hidden="true"></div>
-          <input id="add-input" type="text" placeholder="Add a task   ~list  !prio  @date" spellcheck="false" aria-label="Add a task"
-                 title="Enter to add. Try: ~list, !high !med !low, @today @tomorrow @2026-12-31" />
-        </div>
-        <button type="button" class="mini-btn p-none" id="add-priority" title="Priority" aria-label="Priority" aria-haspopup="true">
-          <svg viewBox="0 0 24 24"><path d="M5 21V4" /><path d="M5 4h12l-2.5 4 2.5 4H5" /></svg>
-        </button>
-        <button type="button" class="mini-btn" id="add-due" title="Due date" aria-label="Due date" aria-haspopup="true">
-          <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /></svg>
-          <span id="add-due-label"></span>
-        </button>
-        <span class="add-enter" aria-hidden="true">↵</span>
-      </form>
-      <div class="add-preview" id="add-preview" aria-live="polite" hidden></div>
-    </div>
+    <!-- Pegangan di celah antara kartu: tarik / panah atas-bawah untuk mengubah tinggi Notes -->
+    <div class="resizer" id="notes-resizer" role="separator" aria-orientation="horizontal" aria-controls="notes-section"
+         aria-label="Resize notes" tabindex="0" title="Drag to resize notes · double-click to reset"></div>
 
-    <!-- Catatan di daily note hari ini -->
-    <section class="notes" id="notes-section">
-      <button type="button" class="notes-head" id="notes-toggle" aria-expanded="true" aria-controls="notes">
-        <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></span>
-        <span class="notes-label">notes</span>
-        <span class="status" id="notes-status">today</span>
-      </button>
+    <!-- Kartu Notes: catatan di daily note hari ini -->
+    <section class="card notes" id="notes-section">
+      <div class="notes-head">
+        <button type="button" class="notes-toggle" id="notes-toggle" aria-expanded="true" aria-controls="notes" title="Notes in today's daily note">
+          <span class="pencil" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></svg></span>
+          <span class="notes-title">Notes</span>
+          <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></span>
+        </button>
+        <span class="status" id="notes-status" aria-live="polite"></span>
+      </div>
       <textarea id="notes" spellcheck="false" placeholder="Jot something down…" aria-label="Notes"></textarea>
     </section>
 

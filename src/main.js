@@ -32,10 +32,12 @@ const el = {
   tabs: [...document.querySelectorAll(".tabs button")],
   todayBadge: $("today-badge"),
   week: $("week"),
+  taskCard: $("task-card"),
   tasks: $("tasks"),
   empty: $("empty"),
   open: $("btn-open"),
   addForm: $("add-form"),
+  addGo: $("add-go"),
   addInput: $("add-input"),
   addMirror: $("add-mirror"),
   addPreview: $("add-preview"),
@@ -45,6 +47,7 @@ const el = {
   suggest: $("suggest"),
   popover: $("popover"),
   notesSection: $("notes-section"),
+  resizer: $("notes-resizer"),
   notesToggle: $("notes-toggle"),
   notes: $("notes"),
   notesStatus: $("notes-status"),
@@ -587,6 +590,7 @@ function renderTasks(view) {
   const focused = document.activeElement?.classList.contains("list-add") ? document.activeElement.dataset.list : null;
   const { rows, message } = render(view);
   el.tasks.replaceChildren(...rows);
+  layoutNotes(); // strip 7 hari bisa muncul/hilang
   if (focused) [...el.tasks.querySelectorAll(".list-add")].find((i) => i.dataset.list === focused)?.focus();
   // Pesan besar di tengah hanya kalau tidak ada apa pun untuk ditampilkan.
   el.empty.textContent = message;
@@ -1115,7 +1119,10 @@ function shownHere(due, list) {
 el.addForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = el.addInput.value.trim();
-  if (!text || !state.view) return;
+  if (!text || !state.view) {
+    el.addInput.focus();
+    return;
+  }
   closeSuggest();
   const typed = quickTokens(text);
   const args = { text, list: state.view.default_list };
@@ -1128,6 +1135,7 @@ el.addForm.addEventListener("submit", async (e) => {
   const result = await mutate("add_task", args);
   if (!result) return; // gagal: biarkan teksnya supaya bisa diperbaiki
   el.addInput.value = "";
+  if (e.submitter === el.addGo) el.addInput.focus(); // tombol +: lanjut mengetik
   state.draft = { priority: null, due: null };
   renderDraft();
   el.tasks.scrollTop = 0;
@@ -1145,7 +1153,7 @@ const clock = () => {
 };
 
 function renderNotesStatus() {
-  el.notesStatus.textContent = "today" + (state.notesNote ? ` · ${state.notesNote}` : "");
+  el.notesStatus.textContent = state.notesNote;
 }
 
 async function saveNotes() {
@@ -1175,6 +1183,110 @@ function applyNotesCollapsed() {
   const collapsed = readPref("notesCollapsed", false);
   el.notesSection.classList.toggle("collapsed", collapsed);
   el.notesToggle.setAttribute("aria-expanded", String(!collapsed));
+  layoutNotes();
+}
+
+/* --- Tinggi kartu Notes: pegangan di celah antara kartu task dan Notes --- */
+
+const NOTES_DEFAULT_H = 150; // = DEFAULT_NOTES_HEIGHT di config.rs (klik ganda pegangan)
+const TASK_MIN_H = 120; // kartu task minimal ±120px
+const NOTES_STEP = 8; // panah atas/bawah; Shift = 4x
+// saved: nilai di config.json (diubah hanya oleh user); shown: tinggi yang
+// dipakai sekarang, dijepit ke ruang yang ada; drag: tarikan yang sedang jalan.
+const notesSize = { saved: NOTES_DEFAULT_H, shown: NOTES_DEFAULT_H, drag: null, timer: null };
+
+const px = (v) => parseFloat(v) || 0;
+
+/** [min, max] tinggi kartu Notes untuk ukuran widget sekarang. */
+function notesBounds() {
+  const card = getComputedStyle(el.notesSection);
+  const box = getComputedStyle(el.notes);
+  const head = el.notesSection.querySelector(".notes-head").offsetHeight;
+  // Minimal: header + 2 baris teks di kotak tulis.
+  const twoLines = 2 * px(box.lineHeight) + px(box.paddingTop) + px(box.paddingBottom) + px(box.borderTopWidth) + px(box.borderBottomWidth);
+  const min = Math.ceil(head + twoLines + px(card.paddingTop) + px(card.paddingBottom) + px(card.borderTopWidth) + px(card.borderBottomWidth));
+  // Ruang kedua kartu: dari atas kartu task sampai padding bawah panel, minus pegangan.
+  const space = el.panel.clientHeight - px(getComputedStyle(el.panel).paddingBottom) - el.taskCard.offsetTop - el.resizer.offsetHeight;
+  // Kartu task minimal ±120px; kalau widget terlalu pendek untuk keduanya,
+  // Notes tetap di batas minimalnya dan kartu task yang mengecil.
+  return [min, Math.max(min, Math.floor(space - TASK_MIN_H))];
+}
+
+/** Pasang tinggi Notes (dijepit ke batas); pegangan disembunyikan saat dilipat. */
+function layoutNotes() {
+  const folded = readPref("notesCollapsed", false);
+  el.panel.classList.toggle("notes-folded", folded);
+  if (folded) {
+    el.notesSection.style.height = "";
+    return;
+  }
+  const [min, max] = notesBounds();
+  const want = notesSize.drag ? notesSize.drag.h : notesSize.saved;
+  notesSize.shown = Math.min(Math.max(Math.round(want), min), max);
+  el.notesSection.style.height = `${notesSize.shown}px`;
+  el.resizer.setAttribute("aria-valuemin", String(min));
+  el.resizer.setAttribute("aria-valuemax", String(max));
+  el.resizer.setAttribute("aria-valuenow", String(notesSize.shown));
+}
+
+/** Simpan tinggi Notes ke config.json (sedikit ditunda saat pakai keyboard). */
+function saveNotesHeight(delay = 0) {
+  clearTimeout(notesSize.timer);
+  notesSize.timer = setTimeout(() => patchConfig({ notes_height: notesSize.saved }), delay);
+}
+
+/** Tinggi baru dari user (tarik / keyboard): jepit ke batas sekarang, lalu simpan. */
+function setNotesHeight(h, delay) {
+  const [min, max] = notesBounds();
+  notesSize.saved = Math.min(Math.max(Math.round(h), min), max);
+  layoutNotes();
+  saveNotesHeight(delay);
+}
+
+// Koordinat mouse ada di ruang layar yang sudah di-zoom; bagi dengan skalanya.
+const layoutScale = () => el.panel.getBoundingClientRect().height / el.panel.offsetHeight || 1;
+
+el.resizer.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  el.resizer.setPointerCapture(e.pointerId);
+  notesSize.drag = { y: e.clientY, start: notesSize.shown, h: notesSize.shown, scale: layoutScale() };
+  el.resizer.classList.add("dragging");
+  document.body.classList.add("resizing");
+});
+el.resizer.addEventListener("pointermove", (e) => {
+  const d = notesSize.drag;
+  if (!d) return;
+  // Tarik ke atas = Notes lebih tinggi.
+  d.h = d.start - (e.clientY - d.y) / d.scale;
+  layoutNotes();
+});
+function endDrag() {
+  const d = notesSize.drag;
+  if (!d) return;
+  notesSize.drag = null;
+  el.resizer.classList.remove("dragging");
+  document.body.classList.remove("resizing");
+  if (notesSize.shown !== d.start) setNotesHeight(notesSize.shown);
+  else layoutNotes();
+}
+el.resizer.addEventListener("pointerup", endDrag);
+el.resizer.addEventListener("pointercancel", endDrag);
+el.resizer.addEventListener("lostpointercapture", endDrag);
+// Klik ganda: kembali ke tinggi bawaan.
+el.resizer.addEventListener("dblclick", () => setNotesHeight(NOTES_DEFAULT_H));
+el.resizer.addEventListener("keydown", (e) => {
+  const step = e.shiftKey ? NOTES_STEP * 4 : NOTES_STEP;
+  if (e.key === "ArrowUp") setNotesHeight(notesSize.shown + step, 300);
+  else if (e.key === "ArrowDown") setNotesHeight(notesSize.shown - step, 300);
+  else return;
+  e.preventDefault();
+});
+// Widget diubah ukurannya / strip 7 hari muncul: jepit ulang.
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(() => layoutNotes());
+  ro.observe(el.panel);
+  ro.observe(el.week);
 }
 el.notesToggle.addEventListener("click", async () => {
   const collapse = !readPref("notesCollapsed", false);
@@ -1226,7 +1338,7 @@ function showToast(message, { action, run, ms = 3500, info = false } = {}) {
 
 /* ---------- Config tampilan (tema, zoom, opacity, always on top) ---------- */
 
-let display = null; // config terakhir: theme, appearance, zoom, opacity, always_on_top
+let display = null; // config terakhir: theme, appearance, zoom, opacity, always_on_top, notes_height
 
 /** Terapkan setting tampilan dari config ke widget. */
 function applyDisplay(cfg) {
@@ -1235,6 +1347,8 @@ function applyDisplay(cfg) {
   document.documentElement.style.zoom = String((cfg.zoom || 100) / 100);
   // Hanya latar panel dan permukaan yang ikut transparan (lihat theme.css).
   document.documentElement.style.setProperty("--opacity", `${cfg.opacity ?? 95}%`);
+  if (cfg.notes_height) notesSize.saved = cfg.notes_height;
+  layoutNotes();
   if (appWindow) appWindow.setAlwaysOnTop(cfg.always_on_top).catch(() => {});
 }
 
@@ -1450,6 +1564,7 @@ function mockInvoke() {
     zoom: 100,
     always_on_top: true,
     opacity: 95,
+    notes_height: 150,
   };
 
   /** Nomor baris: daily note mulai baris 3; Tasks.md tiap heading satu baris. */

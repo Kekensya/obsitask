@@ -48,7 +48,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: 12px;
+  padding-bottom: 10px; /* kartu Notes 10px dari tepi bawah */
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -127,7 +127,6 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   display: flex;
   gap: 18px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--border);
 }
 .tabs button {
   position: relative;
@@ -147,7 +146,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px;
   background: var(--primary);
@@ -180,7 +179,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   grid-template-columns: repeat(7, 1fr);
   align-items: start; /* tinggi tombol = isinya; tanpa ini tombol meregang dan isinya bergeser */
   gap: 4px;
-  padding: 10px 12px 2px;
+  padding: 6px 10px 0;
 }
 .day {
   display: flex;
@@ -189,10 +188,12 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   gap: 1px;
   padding: 5px 0 6px;
   border-radius: 9px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
+  background: var(--f-card);
   transition: background 0.12s;
 }
-.day:hover { background: var(--f-hover-strong); }
+/* Hover: lapisan tipis di atas warna kartu. */
+.day:hover { background-image: linear-gradient(var(--f-hover-strong), var(--f-hover-strong)); }
 .day .wd { font: 10px/1.3 var(--mono); color: var(--muted); }
 .day .dn { font: 600 15px/1.25 var(--display); }
 .day .bar-slot { height: 14px; display: flex; align-items: flex-end; }
@@ -203,19 +204,38 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .day[aria-pressed="true"] { background: var(--f-primary-soft); border-color: var(--primary-line); }
 .day[aria-pressed="true"] .dn { color: var(--primary-text); }
 
+/* ---------- Kartu ---------- */
+
+/* Kartu task dan kartu Notes: 10px dari tepi kiri/kanan/bawah, 8px antar kartu
+   (celah itu = pegangan resize). Judul, tab, dan strip 7 hari ada di panel. */
+.card {
+  margin: 0 10px;
+  background: var(--f-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.task-card {
+  /* Ambil sisa ruang; tinggi Notes diatur main.js (layoutNotes). */
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 /* ---------- Daftar task ---------- */
 
 .task-list {
   list-style: none;
   margin: 0;
-  padding: 4px 8px 4px 12px;
+  padding: 2px 8px 6px 10px;
   overflow-y: auto;
-  /* Ambil sisa ruang saja (basis 0), jadi Notes tetap ±96px; kalau widget
-     pendek, daftar berhenti di 72px dan Notes yang menyusut. */
   flex: 1 1 0;
-  min-height: 72px;
+  min-height: 0;
 }
 .task-list ul { list-style: none; margin: 0; padding: 0; }
+.panel[data-tab="all"] .task-list { padding-top: 6px; }
 
 .task {
   position: relative;
@@ -227,7 +247,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 }
 .task:hover, .task:focus-within { background: var(--f-hover); }
 
-/* Kotak checkbox 18px; garisnya menandai prioritas. */
+/* Checkbox lingkaran 18px; garisnya menandai prioritas. */
 .task .box {
   flex: none;
   width: 18px;
@@ -237,7 +257,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   place-items: center;
   /* Garis 1.6px lewat box-shadow: border dibulatkan ke piksel layar (1.14px di 175%). */
   box-shadow: inset 0 0 0 1.6px var(--box-ring);
-  border-radius: 5px;
+  border-radius: 50%;
   color: var(--on-primary);
   --box-ring: var(--ring);
   transition: background 0.15s, box-shadow 0.15s;
@@ -267,7 +287,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   align-items: flex-start;
   gap: 4px;
   padding: 7px 0 7px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--sep);
 }
 .task .body { min-width: 0; flex: 1; }
 .task .title {
@@ -361,7 +381,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 
 .list-block { border-radius: 12px; margin-bottom: 2px; }
 .list-block.open { background: var(--f-hover); padding-bottom: 6px; }
-.list-head { display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px 0 6px; }
+.list-head { display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 3px 0 6px; }
 .list-toggle {
   flex: 1;
   min-width: 0;
@@ -380,17 +400,18 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   text-overflow: ellipsis;
 }
 .list-count { font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* + di samping nama list: ikon aksen tanpa kotak, area klik ±30px. */
 .list-plus {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  color: var(--muted);
+  border-radius: 8px;
+  color: var(--primary-text);
 }
-.list-plus:hover { color: var(--text); background: var(--f-hover-strong); }
-.list-plus svg { width: 14px; height: 14px; stroke-width: 2; }
+.list-plus:hover { background: var(--f-hover-strong); }
+.list-plus svg { width: 15px; height: 15px; stroke-width: 2.2; }
 .list-block .list-tasks { padding: 0 6px 0 6px; }
 .list-block .group { padding: 10px 4px 3px 4px; }
 .list-empty { padding: 2px 4px 6px 32px; font-size: 12px; color: var(--faint); }
@@ -434,17 +455,19 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 
 /* ---------- Quick-add ---------- */
 
-.add-wrap { position: relative; flex: none; margin: 8px 12px 0; }
+/* Bar tambah task di atas kartu task (Today / Upcoming; All punya + per list). */
+.add-wrap { position: relative; flex: none; margin: 10px 10px 4px; }
+.panel[data-tab="all"] .add-wrap { display: none; }
 
 .add-bar {
   height: 40px;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px 0 12px;
+  padding: 0 6px 0 12px;
   background: var(--well);
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: 10px;
 }
 .add-bar:focus-within { border-color: var(--primary-line); }
 .add-prefix { flex: none; font: 600 16px/1 var(--mono); color: var(--primary-text); margin-top: -2px; }
@@ -469,7 +492,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   user-select: text;
   -webkit-user-select: text;
 }
-.add-field input::placeholder { color: var(--faint); white-space: pre; }
+.add-field input::placeholder { color: var(--placeholder); white-space: pre; }
 .add-field input::selection { color: transparent; background: var(--selection); }
 .add-field input:focus { outline: none; }
 .add-mirror {
@@ -485,7 +508,20 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .tok.prio { color: var(--tok-prio); background: color-mix(in srgb, color-mix(in srgb, var(--tok-prio) 10%, transparent) var(--opacity), transparent); }
 .tok.list { color: var(--tok-list); background: color-mix(in srgb, color-mix(in srgb, var(--tok-list) 10%, transparent) var(--opacity), transparent); }
 
-.add-enter { flex: none; padding: 0 2px 0 4px; font: 12px var(--mono); color: var(--faint); }
+/* Tombol +: sama dengan Enter. Tombol aksen tidak ikut opacity. */
+.add-go {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--on-primary);
+  background: var(--primary);
+}
+.add-go:hover { filter: brightness(1.12); }
+.add-go svg { width: 15px; height: 15px; stroke-width: 2.4; }
 
 .mini-btn {
   flex: none;
@@ -512,7 +548,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 
 /* Pratinjau hasil: "→ Kuliah · High · Wed, Nov 18". */
 .add-preview {
-  padding: 5px 4px 0 14px;
+  padding: 6px 4px 0 14px;
   font: 10.5px/14px var(--mono);
   color: var(--muted);
   white-space: nowrap;
@@ -521,11 +557,11 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 }
 .add-preview .warn { color: var(--danger); }
 
-/* Saran list saat mengetik "~" (di atas bar). */
+/* Saran list saat mengetik "~": membuka ke bawah, di bawah bar. */
 .suggest {
   position: absolute;
   left: 22px;
-  bottom: calc(100% + 6px);
+  top: 46px;
   z-index: 4;
   width: 220px;
   max-width: calc(100% - 22px);
@@ -621,57 +657,96 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .pop-danger span { display: grid; }
 .pop-danger svg { width: 14px; height: 14px; }
 
+/* ---------- Pegangan resize (celah 8px antara kartu) ---------- */
+
+.resizer {
+  flex: none;
+  position: relative;
+  height: 8px;
+  margin: 0 10px;
+  cursor: row-resize;
+  outline: none;
+  touch-action: none;
+}
+/* Garis tipis penanda: muncul saat hover, fokus keyboard, dan saat ditarik. */
+.resizer::after {
+  content: "";
+  position: absolute;
+  left: 30%;
+  right: 30%;
+  top: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ring);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.resizer:hover::after { opacity: 0.8; }
+.resizer:focus-visible::after, .resizer.dragging::after { opacity: 1; background: var(--primary); }
+/* Notes dilipat: pegangan disembunyikan, celahnya tetap 8px. */
+.panel.notes-folded .resizer { visibility: hidden; }
+body.resizing, body.resizing * { cursor: row-resize !important; }
+
 /* ---------- Notes ---------- */
 
 .notes {
-  flex: 0 1 auto;
+  flex: none;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin-top: 10px;
-  padding: 2px 12px 0;
-  border-top: 1px solid var(--border);
+  padding: 2px 10px 10px;
+  overflow: hidden;
 }
+.notes.collapsed { padding-bottom: 2px; }
 .notes-head {
   flex: none;
-  width: 100%;
-  height: 30px;
+  height: 36px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 0 2px;
-  font: 11px var(--mono);
-  color: var(--muted);
+}
+.notes-toggle {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 4px 0 0;
+  border-radius: 7px;
   text-align: left;
 }
-.notes-head:hover { color: var(--text); }
-.notes-head .status { margin-left: auto; font-size: 10.5px; color: var(--muted); }
+.notes-toggle .pencil { display: grid; color: var(--muted); }
+.notes-toggle .pencil svg { width: 15px; height: 15px; }
+.notes-title { font: 600 15px/1 var(--display); letter-spacing: -0.2px; color: var(--text); }
+.notes-toggle .chev { color: var(--muted); }
+.notes-toggle:hover .chev, .notes-toggle:hover .pencil { color: var(--text); }
+.notes-head .status {
+  margin-left: auto;
+  font: 11px var(--mono);
+  color: var(--faint);
+  white-space: nowrap;
+}
 .notes.collapsed textarea { display: none; }
 
-/* Kotak bergaris seperti buku tulis: garis tiap 22px, ikut menggulung. */
+/* Kotak tulis polos. */
 .notes textarea {
   display: block;
   width: 100%;
-  /* ±96px; boleh menyusut sampai satu baris kalau widget pendek */
-  flex: 0 1 96px;
-  height: auto;
-  min-height: 32px;
+  flex: 1 1 auto;
+  min-height: 0;
   resize: none;
-  padding: 4px 12px;
-  font: 13px/22px var(--sans);
+  padding: 9px 12px;
+  font: 13px/1.55 var(--sans);
   color: var(--text);
-  background-color: var(--well);
-  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 21px, var(--border) 21px, var(--border) 22px);
-  background-position: 0 4px;
-  background-attachment: local;
+  background: var(--well);
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: 10px;
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
 }
-.panel[data-tab="upcoming"] .notes textarea { flex-basis: 74px; }
-.notes textarea::placeholder { color: var(--faint); }
+.notes textarea::placeholder { color: var(--placeholder); }
 .notes textarea:focus { outline: none; border-color: var(--primary-line); }
 
 /* ---------- Toast ---------- */
@@ -761,19 +836,23 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 
 /* ---------- Widget sempit ---------- */
 
+/* Placeholder quick-add utuh: label tanggal di tombol kalender disembunyikan
+   (ikonnya tetap berwarna aksen; tanggalnya ada di pratinjau dan tooltip). */
+@media (max-width: 380px) {
+  #add-due-label { display: none; }
+}
+
 @media (max-width: 320px) {
   .title { font-size: 21px; }
-  #add-due-label { display: none; }
   .tabs { gap: 14px; }
 }
 
 /* ---------- Widget pendek ---------- */
 
 @media (max-height: 420px) {
-  .panel { padding-bottom: 8px; }
   .heading { padding-bottom: 6px; }
   .week { padding-top: 4px; }
   .day { padding: 2px 0 3px; }
-  .add-wrap { margin-top: 6px; }
-  .notes { margin-top: 6px; }
+  .add-wrap { margin-top: 8px; }
+  .notes-head { height: 32px; }
 }

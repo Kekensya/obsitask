@@ -6,19 +6,19 @@
  * Terax (https://github.com/crynta/terax-ai, src/modules/theme/themes, lisensi
  * Apache-2.0) — hanya nilai warnanya yang diambil, dipetakan ke token ObsiTask:
  *
- *   background  -> panel (opacity diatur user)    card      -> kartu (Settings)
+ *   background  -> panel                        card      -> kartu task/notes, popover, kartu Settings
  *   text        <- cardForeground               muted     <- mutedForeground
- *   border      -> garis kartu / panel          secondary -> permukaan: quick-add, Notes
+ *   border      -> garis kartu / panel          secondary -> kolom di dalam kartu: bar tambah task, kotak Notes
  *   accent      -> hover, latar list terbuka          primary   -> aksen: checkbox, tab, fokus
  *   onPrimary   <- primaryForeground            danger    <- destructive (overdue, toast error)
  *   high/medium/low <- terminal ansi[1]/[3]/[4] tag       <- terminal ansi[6]
  *   selection   <- terminal selection
  *
- * Token opsional (hanya Default): faint, raised, primaryText, primarySoft, ring,
- * sidebar. Kalau tidak ada, theme.css menurunkannya dari token lain.
+ * Token opsional (hanya Default): faint, placeholder, separator (garis antar
+ * task), raised (popover), primaryText, primarySoft, ring, sidebar. Kalau tidak ada, theme.css menurunkannya dari token lain.
  *
  * Kontras: token yang di bawah WCAG (teks 4.5:1, kotak prioritas dan ikon 3:1,
- * diukur di atas panel, permukaan input/Notes, dan kartu — yang terburuk)
+ * diukur di atas panel, kolom bar tambah/Notes, dan kartu — yang terburuk)
  * digeser sedikit ke arah warna teks tema itu sampai lolos; daftar token yang
  * diubah ada di `adjusted`. Default tidak diubah (nilainya sudah lolos).
  */
@@ -29,13 +29,15 @@ const OBSI_THEMES = [
     name: "Default",
     variants: {
       dark: {
-        background: "#1e1e1e",
-        card: "#242424",
+        background: "#181818",
+        card: "#2a2a2a",
         text: "#dadada",
         muted: "#a3a3a3",
-        faint: "#8c8c8c",
-        border: "rgba(218, 218, 218, 0.08)",
-        secondary: "#262626",
+        faint: "#949494",
+        placeholder: "#a0a0a0",
+        border: "rgba(218, 218, 218, 0.06)",
+        separator: "rgba(218, 218, 218, 0.07)",
+        secondary: "#333333",
         accent: "rgba(218, 218, 218, 0.035)",
         primary: "#8a6cef",
         onPrimary: "#121212",
@@ -48,17 +50,18 @@ const OBSI_THEMES = [
         ring: "#6e6e6e",
         tag: "#ab94f7",
         selection: "rgba(138, 108, 239, 0.32)",
-        raised: "#2a2a2a",
-        sidebar: "#181818"
+        raised: "#3a3a3a",
+        sidebar: "#141414"
       },
       light: {
-        background: "#ffffff",
-        card: "#f6f6f6",
+        background: "#f2f2f2",
+        card: "#ffffff",
         text: "#222222",
         muted: "#5c5c5c",
         faint: "#6b6b6b",
-        border: "rgba(34, 34, 34, 0.10)",
-        secondary: "#f6f6f6",
+        border: "rgba(34, 34, 34, 0.08)",
+        separator: "rgba(34, 34, 34, 0.08)",
+        secondary: "#f2f2f2",
         accent: "rgba(34, 34, 34, 0.035)",
         primary: "#7a5af0",
         onPrimary: "#ffffff",
@@ -72,7 +75,7 @@ const OBSI_THEMES = [
         tag: "#7a5af0",
         selection: "rgba(122, 90, 240, 0.20)",
         raised: "#ffffff",
-        sidebar: "#f6f6f6"
+        sidebar: "#e9e9e9"
       }
     }
   },
@@ -743,7 +746,9 @@ const THEME_VARS = {
   text: "--text",
   muted: "--muted",
   faint: "--faint",
+  placeholder: "--placeholder",
   border: "--border",
+  separator: "--sep",
   secondary: "--secondary",
   accent: "--hover",
   primary: "--primary",

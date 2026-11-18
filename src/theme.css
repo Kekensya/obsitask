@@ -16,12 +16,12 @@
 
 :root {
   /* Token dasar (lihat themes.js) */
-  --bg: #1e1e1e;
-  --card: #242424;
+  --bg: #181818;
+  --card: #2a2a2a;
   --text: #dadada;
   --muted: #a3a3a3;
-  --border: rgba(218, 218, 218, 0.08);
-  --secondary: #262626;
+  --border: rgba(218, 218, 218, 0.06);
+  --secondary: #333333;
   --hover: rgba(218, 218, 218, 0.035);
   --primary: #8a6cef;
   --on-primary: #121212;
@@ -34,7 +34,9 @@
 
   /* Token opsional: kalau tema tidak mengisinya, diturunkan dari token dasar */
   --faint: color-mix(in srgb, var(--muted) 85%, transparent);
-  --raised: var(--card);
+  --placeholder: var(--faint);
+  --sep: var(--border); /* garis antar task */
+  --raised: var(--card); /* popover / menu */
   --primary-text: var(--primary);
   --primary-soft: color-mix(in srgb, var(--primary) 26%, transparent);
   --ring: color-mix(in srgb, var(--text) 78%, transparent);
@@ -49,7 +51,8 @@
 
   /* Latar yang ikut opacity */
   --panel: color-mix(in srgb, var(--bg) var(--opacity), transparent);
-  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent); /* quick-add, Notes, input, chip menu */
+  --f-card: color-mix(in srgb, var(--card) var(--opacity), transparent); /* kartu task / Notes, kotak hari */
+  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent); /* kolom di kartu: bar tambah, kotak Notes, input, chip menu */
   --f-hover: color-mix(in srgb, var(--hover) var(--opacity), transparent); /* hover baris, list terbuka */
   --f-hover-strong: color-mix(in srgb, var(--hover-strong) var(--opacity), transparent); /* hover tombol */
   --f-primary-soft: color-mix(in srgb, var(--primary-soft) var(--opacity), transparent); /* pilihan aktif */

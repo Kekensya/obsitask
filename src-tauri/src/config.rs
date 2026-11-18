@@ -38,6 +38,10 @@ pub struct Config {
     /// Nilai di luar rentang (juga negatif atau pecahan) dijepit saat dibaca.
     #[serde(deserialize_with = "clamped_opacity")]
     pub opacity: u32,
+    /// Tinggi kartu Notes di widget (px CSS), sama di semua tab. Widget
+    /// menjepitnya lagi ke ruang yang tersedia; nilai di sini tidak diubah.
+    #[serde(deserialize_with = "clamped_notes_height")]
+    pub notes_height: u32,
 }
 
 pub const MIN_ZOOM: u32 = 80;
@@ -54,6 +58,21 @@ fn clamped_opacity<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Err
         return Ok(Config::default().opacity);
     }
     Ok(v.round().clamp(MIN_OPACITY as f64, MAX_OPACITY as f64) as u32)
+}
+
+/// Tinggi kartu Notes bawaan (klik ganda pegangan = kembali ke sini) dan
+/// batas kasarnya; batas sebenarnya (header + 2 baris, kartu task ±120px)
+/// dihitung di widget dari ukuran window.
+pub const DEFAULT_NOTES_HEIGHT: u32 = 150;
+pub const MIN_NOTES_HEIGHT: u32 = 60;
+pub const MAX_NOTES_HEIGHT: u32 = 2000;
+
+fn clamped_notes_height<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = f64::deserialize(d)?;
+    if v.is_nan() {
+        return Ok(DEFAULT_NOTES_HEIGHT);
+    }
+    Ok(v.round().clamp(MIN_NOTES_HEIGHT as f64, MAX_NOTES_HEIGHT as f64) as u32)
 }
 
 /// Batas atas `scan_days`, supaya polling tetap ringan.
@@ -79,6 +98,7 @@ impl Default for Config {
             zoom: 100,
             always_on_top: true,
             opacity: 95,
+            notes_height: DEFAULT_NOTES_HEIGHT,
         }
     }
 }
@@ -176,6 +196,7 @@ impl Config {
         };
         self.zoom = self.zoom.clamp(MIN_ZOOM, MAX_ZOOM);
         self.opacity = self.opacity.clamp(MIN_OPACITY, MAX_OPACITY);
+        self.notes_height = self.notes_height.clamp(MIN_NOTES_HEIGHT, MAX_NOTES_HEIGHT);
         let theme = self.theme.trim();
         self.theme = if theme.is_empty() { "default".to_string() } else { theme.to_string() };
     }
@@ -383,6 +404,25 @@ mod tests {
         let old: Config = serde_json::from_str(r#"{"vault_path": "x"}"#).unwrap();
         assert_eq!((old.theme.as_str(), old.appearance.as_str(), old.zoom, old.always_on_top), ("default", "system", 100, true));
         assert_eq!(old.opacity, 95);
+    }
+
+    #[test]
+    fn notes_height_is_saved_and_clamped() {
+        let read = |json: &str| serde_json::from_str::<Config>(json).unwrap().notes_height;
+        // Config lama tanpa field ini: tinggi bawaan.
+        assert_eq!(read(r#"{"vault_path": "x"}"#), DEFAULT_NOTES_HEIGHT);
+        assert_eq!(read(r#"{"notes_height": 212}"#), 212);
+        assert_eq!(read(r#"{"notes_height": 212.6}"#), 213);
+        assert_eq!(read(r#"{"notes_height": -4}"#), MIN_NOTES_HEIGHT);
+        assert_eq!(read(r#"{"notes_height": 99999}"#), MAX_NOTES_HEIGHT);
+        let current = Config::default();
+        let mut patch = serde_json::Map::new();
+        patch.insert("notes_height".into(), serde_json::json!(180));
+        let next = apply_patch(&current, &patch).unwrap();
+        assert_eq!((next.notes_height, next.opacity), (180, current.opacity));
+        let mut cfg = Config { notes_height: 5, ..Config::default() };
+        cfg.normalize_display();
+        assert_eq!(cfg.notes_height, MIN_NOTES_HEIGHT);
     }
 
     #[test]

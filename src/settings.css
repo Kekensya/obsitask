@@ -236,7 +236,7 @@ input[type="text"]:focus, input[type="number"]:focus { outline: none; border-col
 .preview .pv-title { width: 38%; height: 6px; border-radius: 3px; background: var(--text); }
 .preview .pv-accent { margin-left: auto; width: 18px; height: 2px; border-radius: 1px; background: var(--primary); }
 .preview .pv-row { display: flex; align-items: center; gap: 6px; }
-.preview .pv-box { flex: none; width: 9px; height: 9px; border-radius: 2.5px; border: 1.5px solid var(--muted); }
+.preview .pv-box { flex: none; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--muted); }
 .preview .pv-box.high { border-color: var(--p-high); }
 .preview .pv-box.medium { border-color: var(--p-medium); }
 .preview .pv-box.low { border-color: var(--p-low); }
