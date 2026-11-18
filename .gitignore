@@ -2,3 +2,10 @@ target/
 src-tauri/target/
 src-tauri/gen/
 .DS_Store
+
+# Config lokal / uji (config asli ada di %APPDATA%, tidak di repo)
+config*.json
+!src-tauri/tauri.conf.json
+*.local.json
+.env
+.env.*
