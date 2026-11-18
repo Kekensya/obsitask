@@ -11,7 +11,7 @@
 <body>
   <div class="layout">
     <nav class="nav" aria-label="Settings sections">
-      <div class="brand">ObsiTask</div>
+      <div class="brand">obsitask<span class="brand-dot">.</span> <span class="brand-sub">settings</span></div>
       <button type="button" data-tab="general" aria-current="page">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 00-2.6-1.5L14 2.5h-4l-.5 2.5a7.5 7.5 0 00-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 000 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 002.6 1.5l.5 2.5h4l.5-2.5a7.5 7.5 0 002.6-1.5l2.3.9 2-3.4-2-1.5z" /></svg>
         General
@@ -32,55 +32,52 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></svg>
         About
       </button>
+      <div class="nav-foot" id="s-nav-version"></div>
     </nav>
 
     <main class="content">
       <!-- General -->
       <section data-panel="general">
-        <h1>General</h1>
-
-        <h2>Appearance</h2>
-        <div class="appearance" role="radiogroup" aria-label="Appearance">
-          <button type="button" class="mode-card" data-appearance="system" role="radio">
-            <span class="mode-art system"><span class="half light"></span><span class="half dark"></span></span>
-            <span class="mode-name">System</span>
-            <span class="mode-desc">Follows Windows</span>
-          </button>
-          <button type="button" class="mode-card" data-appearance="light" role="radio">
-            <span class="mode-art"><span class="half light full"></span></span>
-            <span class="mode-name">Light</span>
-          </button>
-          <button type="button" class="mode-card" data-appearance="dark" role="radio">
-            <span class="mode-art"><span class="half dark full"></span></span>
-            <span class="mode-name">Dark</span>
-          </button>
-        </div>
-
-        <h2>Widget</h2>
+        <header class="page-head">
+          <div><h1>General</h1><p class="subtitle">How the widget looks and behaves on your desktop.</p></div>
+        </header>
         <div class="rows">
           <div class="row">
             <div class="row-text">
               <label for="s-zoom">Zoom</label>
               <p>Size of everything in the widget.</p>
             </div>
-            <div class="row-control zoom">
+            <div class="row-control slider">
               <input id="s-zoom" type="range" min="80" max="150" step="5" />
               <output id="s-zoom-value" for="s-zoom">100%</output>
             </div>
           </div>
           <div class="row">
             <div class="row-text">
+              <label for="s-opacity">Widget opacity</label>
+              <p>Only the background fades. Text, icons and checkboxes stay solid.</p>
+            </div>
+            <div class="row-control slider">
+              <input id="s-opacity" type="range" min="40" max="100" step="1" />
+              <output id="s-opacity-value" for="s-opacity">95%</output>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row-text">
               <label for="s-top">Always on top</label>
-              <p>Keep the widget above other windows. Same as the pin button.</p>
+              <p>Keep the widget above other windows.</p>
             </div>
             <div class="row-control"><input id="s-top" class="switch" type="checkbox" role="switch" /></div>
           </div>
         </div>
+        <p class="footnote">Light / dark appearance and colors are under Themes.</p>
       </section>
 
       <!-- Vault -->
       <section data-panel="vault" hidden>
-        <h1>Vault</h1>
+        <header class="page-head">
+          <div><h1>Vault</h1><p class="subtitle">Where ObsiTask reads your daily notes and lists.</p></div>
+        </header>
         <div class="rows">
           <div class="row stack" data-field="vault_path">
             <div class="row-text">
@@ -146,12 +143,14 @@
 
       <!-- Tasks -->
       <section data-panel="tasks" hidden>
-        <h1>Tasks</h1>
+        <header class="page-head">
+          <div><h1>Tasks</h1><p class="subtitle">What the Today, Upcoming and All tabs show.</p></div>
+        </header>
         <div class="rows">
           <div class="row">
             <div class="row-text">
               <label for="s-hide">Hide completed tasks</label>
-              <p>In Today and Upcoming. Finished tasks still show under "Completed today".</p>
+              <p>In Today and Upcoming. Finished tasks still show under "done today", and in each list's "Completed" group.</p>
             </div>
             <div class="row-control"><input id="s-hide" class="switch" type="checkbox" role="switch" /></div>
           </div>
@@ -182,14 +181,23 @@
 
       <!-- Themes -->
       <section data-panel="themes" hidden>
-        <h1>Themes</h1>
-        <p class="lead" id="themes-lead"></p>
+        <header class="page-head">
+          <div><h1>Themes</h1><p class="subtitle">Colors for the widget and this window.</p></div>
+          <div class="seg" role="radiogroup" aria-label="Appearance">
+            <button type="button" role="radio" data-appearance="system" title="Follow Windows light / dark mode">System</button>
+            <button type="button" role="radio" data-appearance="light">Light</button>
+            <button type="button" role="radio" data-appearance="dark">Dark</button>
+          </div>
+        </header>
         <div class="theme-grid" id="theme-grid" role="radiogroup" aria-label="Theme"></div>
+        <p class="credit">Theme colors other than Default come from <strong>Terax</strong> by crynta (github.com/crynta/terax-ai), Apache License 2.0. Only the color values are used.</p>
       </section>
 
       <!-- About -->
       <section data-panel="about" hidden>
-        <h1>About</h1>
+        <header class="page-head">
+          <div><h1>About</h1><p class="subtitle">Version, config file and credits.</p></div>
+        </header>
         <div class="rows">
           <div class="row">
             <div class="row-text">
@@ -210,6 +218,7 @@
               <span class="label">Credits</span>
               <p>The colors of the built-in themes (except Default) and the style of this window come from
                 <strong>Terax</strong> by crynta — github.com/crynta/terax-ai — licensed under the Apache License 2.0.</p>
+              <p>Headings use Space Grotesk (SIL Open Font License 1.1), bundled with the app.</p>
               <p>Task metadata follows the emoji format of the Obsidian Tasks plugin.</p>
             </div>
           </div>

@@ -34,10 +34,14 @@ pub struct Config {
     pub zoom: u32,
     /// Widget selalu di atas window lain.
     pub always_on_top: bool,
+    /// Opacity latar widget dalam persen (40-100); teks tetap penuh.
+    pub opacity: u32,
 }
 
 pub const MIN_ZOOM: u32 = 80;
 pub const MAX_ZOOM: u32 = 150;
+pub const MIN_OPACITY: u32 = 40;
+pub const MAX_OPACITY: u32 = 100;
 
 /// Batas atas `scan_days`, supaya polling tetap ringan.
 pub const MAX_SCAN_DAYS: u32 = 365;
@@ -61,6 +65,7 @@ impl Default for Config {
             appearance: "system".to_string(),
             zoom: 100,
             always_on_top: true,
+            opacity: 95,
         }
     }
 }
@@ -149,14 +154,15 @@ pub struct DetectedDaily {
 }
 
 impl Config {
-    /// Rapikan setting tampilan: appearance yang dikenal, zoom dalam batas,
-    /// id tema tidak kosong.
+    /// Rapikan setting tampilan: appearance yang dikenal, zoom dan opacity
+    /// dalam batas, id tema tidak kosong.
     pub fn normalize_display(&mut self) {
         self.appearance = match self.appearance.trim() {
             a @ ("light" | "dark") => a.to_string(),
             _ => "system".to_string(),
         };
         self.zoom = self.zoom.clamp(MIN_ZOOM, MAX_ZOOM);
+        self.opacity = self.opacity.clamp(MIN_OPACITY, MAX_OPACITY);
         let theme = self.theme.trim();
         self.theme = if theme.is_empty() { "default".to_string() } else { theme.to_string() };
     }
@@ -352,16 +358,18 @@ mod tests {
 
     #[test]
     fn normalizes_display_settings() {
-        let mut cfg = Config { appearance: "Purple".into(), zoom: 300, theme: " ".into(), ..Config::default() };
+        let mut cfg = Config { appearance: "Purple".into(), zoom: 300, opacity: 200, theme: " ".into(), ..Config::default() };
         cfg.normalize_display();
-        assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.theme.as_str()), ("system", 150, "default"));
+        assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.opacity, cfg.theme.as_str()), ("system", 150, 100, "default"));
         cfg.appearance = " dark ".into();
         cfg.zoom = 10;
+        cfg.opacity = 5;
         cfg.normalize_display();
-        assert_eq!((cfg.appearance.as_str(), cfg.zoom), ("dark", 80));
+        assert_eq!((cfg.appearance.as_str(), cfg.zoom, cfg.opacity), ("dark", 80, 40));
         // Config lama tanpa field tampilan memakai default.
         let old: Config = serde_json::from_str(r#"{"vault_path": "x"}"#).unwrap();
         assert_eq!((old.theme.as_str(), old.appearance.as_str(), old.zoom, old.always_on_top), ("default", "system", 100, true));
+        assert_eq!(old.opacity, 95);
     }
 
     #[test]
@@ -400,5 +408,6 @@ mod tests {
         assert!(apply_patch(&current, &patch(r#"{"nope": 1}"#)).unwrap_err().contains("nope"));
         assert!(apply_patch(&current, &patch(r#"{"zoom": "big"}"#)).is_err());
         assert_eq!(apply_patch(&current, &patch("{}")).unwrap().theme, "nord");
+        assert_eq!(apply_patch(&current, &patch(r#"{"opacity": 60}"#)).unwrap().opacity, 60);
     }
 }

@@ -4,41 +4,52 @@ Widget desktop kecil untuk task di vault Obsidian: task hari ini, overdue, dan y
 
 Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
 
-Warna tema bawaan (selain Default) dan gaya window Settings diadaptasi dari [Terax](https://github.com/crynta/terax-ai) oleh crynta, lisensi Apache 2.0.
+Warna tema bawaan (selain Default) dan gaya window Settings diadaptasi dari [Terax](https://github.com/crynta/terax-ai) oleh crynta, lisensi Apache 2.0. Font judul [Space Grotesk](https://github.com/floriankarsten/space-grotesk) (SIL Open Font License 1.1) dibundel di `src/fonts/`.
 
 ## Cara kerja
 
 File markdown di vault tetap satu-satunya sumber data: daily note dan satu file list (default `Tasks.md`). Setiap perubahan hanya menulis ulang baris yang dimaksud (line ending dipertahankan, dan ditolak kalau baris itu sudah berubah di Obsidian). Tidak ada database atau file metadata lain.
 
-Widget punya tiga tab:
+Tampilan widget, dari atas ke bawah:
+
+- **Bar atas** — `obsitask.` di kiri, tombol Settings dan Close di kanan. Seluruh bar (dan baris judul) dipakai untuk menggeser widget.
+- **Judul** — tanggal lengkap di Today ("Tuesday, November 17"), "Upcoming" dengan rentang tanggal di kanan ("Nov 18 – 24"), atau "All lists" dengan jumlah task belum selesai ("13 open"). Ikon kecil di kanan judul membuka daily note hari ini (atau `Tasks.md` di tab All) di Obsidian, dan membuatnya kalau belum ada.
+- **Tab** Today / Upcoming / All dengan garis bawah aksen. Today diberi badge jumlah task belum selesai (overdue + hari ini).
+- **Daftar task**, lalu **quick-add**, lalu **notes** di bagian bawah semua tab.
+
+Isi tiap tab:
 
 - **Today**
-  - **Overdue** — task belum selesai dengan deadline sebelum hari ini, dari `Tasks.md` dan dari daily note hari-hari sebelumnya (dengan asalnya, mis. "from Nov 10"). Bisa dilipat.
-  - **Today** — task dengan deadline hari ini dari `Tasks.md` dan daily note lain, plus *semua* task di daily note hari ini.
-  - **Completed today** — task yang dicentang hari ini (`✅` hari ini), dan task selesai di daily note hari ini. Terlipat secara default.
-  - Task dari `Tasks.md` diberi label kecil nama list-nya.
-- **Upcoming** — task belum selesai dengan deadline besok sampai N hari ke depan (default 7, diatur di Settings "Upcoming days"), dikelompokkan per tanggal ("Tomorrow", "Thu, Nov 20").
+  - **overdue** (oranye) — task belum selesai dengan deadline sebelum hari ini, dari `Tasks.md` dan dari daily note hari-hari sebelumnya. Bisa dilipat.
+  - **today** — task dengan deadline hari ini dari `Tasks.md` dan daily note lain, plus *semua* task di daily note hari ini.
+  - **done today** — task yang dicentang hari ini (`✅` hari ini), dan task selesai di daily note hari ini. Terlipat secara default.
+- **Upcoming** — task belum selesai dengan deadline besok sampai N hari ke depan (default 7, "Upcoming days" di Settings), dikelompokkan per tanggal ("tomorrow · wed", "thu · nov 20"). Di atasnya ada strip 7 hari (mulai besok): huruf hari, tanggal, dan batang yang tingginya sesuai jumlah task; hari kosong dibuat redup. Klik satu hari = hanya task hari itu; klik lagi = semua. Hari di luar "Upcoming days" tidak bisa dipilih.
 - **All** — semua list di `Tasks.md` (lihat di bawah).
 
-Task yang terpilih ke sebuah grup selalu dibawa bersama subtask-nya; subtask mengikuti tanggal induknya.
+Judul grup memakai huruf mono kecil dengan jumlahnya di kanan. Task yang terpilih ke sebuah grup selalu dibawa bersama subtask-nya; subtask mengikuti tanggal induknya dan menjorok 28px.
 
-- **Tambah** lewat kotak "Add a task…" + Enter. Task baru selalu masuk ke `Tasks.md`, di list default (default `Inbox`, bisa diatur):
+Tiap baris task: kotak checkbox (garisnya berwarna sesuai prioritas: high oranye, medium kuning, low biru, tanpa prioritas abu-abu; selesai = terisi aksen dengan centang; dibatalkan `[-]` = abu-abu dengan strip), judul, lalu keterangan mono kecil: jam di depan teks (`- [ ] 15:00 Rapat`), deadline ("2d late · Nov 15" untuk yang terlambat, atau "tomorrow" / "Nov 18"), daily note asal ("from Nov 16"), dan nama list (di Today / Upcoming). Di bawah setiap task ada garis tipis yang dimulai sejajar teks.
+
+- **Quick-add** (bar "› Add a task   ~list  !prio  @date" di bawah daftar) — Enter menambah task. Task baru selalu masuk ke `Tasks.md`, di list default (default `Inbox`, bisa diatur):
   - dari Today: dengan `📅` hari ini;
   - dari Upcoming dan All: tanpa deadline.
-  - Token atau tombol mengubahnya. Kalau task baru tidak terlihat di tab yang sedang dibuka, muncul pesan "Added to …".
-- **Quick-add**: `!high` / `!med` / `!low` untuk prioritas, `@today` / `@tomorrow` / `@YYYY-MM-DD` untuk deadline, `~list` untuk list. Atau pakai tombol bendera dan kalender di kotak yang sama (pilihan tombol menang atas token).
-- **Centang** lewat lingkaran checkbox. `✅ YYYY-MM-DD` ditambahkan saat dicentang dan dihapus saat dibatalkan.
-- **Edit**: klik judul untuk mengubah teks (Enter simpan, Esc batal; token quick-add juga berlaku). Tombol `⋯` atau klik kanan membuka menu prioritas, deadline, Move to list, dan hapus. Menghapus task ikut menghapus subtask-nya, dan bisa di-Undo beberapa detik.
+  - Token: `!high` / `!med` / `!low` untuk prioritas, `@today` / `@tomorrow` / `@YYYY-MM-DD` untuk deadline, `~list` untuk list. Token yang dikenali diwarnai seperti chip saat diketik (@tanggal biru, !prioritas oranye, ~list ungu); input-nya tetap input teks biasa (caret, seleksi, copy-paste, undo).
+  - Mengetik `~` memunculkan daftar list yang cocok beserta jumlah task terbukanya di atas bar; ↑/↓ memilih, Tab memasukkan, Esc menutup.
+  - Di bawah bar ada pratinjau hasilnya, mis. "→ Kuliah · High · Wed, Nov 18", atau peringatan kalau list tidak ada.
+  - Tombol bendera dan kalender kecil di bar tetap ada (pilihan tombol menang atas token). Kalau task baru tidak terlihat di tab yang sedang dibuka, muncul pesan "Added to …".
+- **Centang** lewat kotak checkbox. `✅ YYYY-MM-DD` ditambahkan saat dicentang dan dihapus saat dibatalkan.
+- **Edit**: klik judul untuk mengubah teks (Enter simpan, Esc batal; token quick-add juga berlaku). Tombol `⋯` (muncul saat baris disorot) atau klik kanan membuka menu prioritas, deadline, Move to list, dan hapus. Menghapus task ikut menghapus subtask-nya, dan bisa di-Undo beberapa detik.
 - Semua perubahan dari tab mana pun ditulis ke file asal task itu (daily note lama, daily note hari ini, atau `Tasks.md`), dengan pengaman yang sama.
 - **Metadata** memakai format emoji plugin Obsidian Tasks di akhir baris: `⏫` high, `🔼` medium, `🔽` low, `📅 YYYY-MM-DD` deadline, `✅ YYYY-MM-DD` selesai. Field Tasks lain (`➕`, `🛫`, `⏳`, …) dan block id dibiarkan utuh.
 - **Urutan tampil**: belum selesai dulu, lalu prioritas, lalu deadline; subtask tetap di bawah induknya. Urutan baris di file tidak pernah diubah.
-- **Daily note yang dipindai**: hari ini, `scan_days` hari ke belakang ("Look back for due tasks", default 30, maksimum 365, 0 = mati), dan N hari ke depan untuk Upcoming. Hasil parse tiap file (daily note dan `Tasks.md`) di-cache berdasarkan waktu modifikasi + ukuran, jadi polling 2 detik hanya mengecek metadata file.
+- **Daily note yang dipindai**: hari ini, `scan_days` hari ke belakang ("Look-back days", default 30, maksimum 365, 0 = mati), dan N hari ke depan untuk Upcoming. Hasil parse tiap file (daily note dan `Tasks.md`) di-cache berdasarkan waktu modifikasi + ukuran, jadi polling 2 detik hanya mengecek metadata file.
 
 ### List permanen (`Tasks.md`, tab All)
 
 - Setiap heading `## Nama` adalah satu list, sesuai urutan di file. `###` dan lebih dalam tetap bagian list di atasnya. `#` mengakhiri list; task sesudahnya, juga task sebelum heading `##` pertama, masuk Inbox. Heading dengan nama sama digabung. Heading dan task di dalam code block diabaikan.
 - Format baris dan metadata sama persis dengan di daily note.
-- Tab All menampilkan semua list (bisa dilipat, dengan jumlah task belum selesai), masing-masing dengan input "Add to …" sendiri. Task selesai disembunyikan; tombol "Show completed" menampilkannya. Task tanpa deadline juga ada di sini.
+- Tab All menampilkan semua list. Tiap list bisa dilipat (chevron, nama, jumlah task belum selesai); list yang terbuka diberi latar tipis. Tombol `+` di kepala list membuka input "Add to …" untuk list itu (Esc atau klik di luar menutupnya). Task tanpa deadline juga ada di sini.
+- Task selesai dan dibatalkan ada di grup **Completed N** di bagian bawah tiap list (terlipat secara default; status buka/tutupnya diingat per list), dicoret, dengan tanggal selesai dari `✅` di kanan ("Today", "Yesterday", "Nov 15"). List tanpa task selesai tidak punya grup ini. Subtask selesai yang induknya belum selesai tetap tampil di bawah induknya.
 - List default selalu tampil walau heading-nya belum ada; heading-nya dibuat di akhir file saat task pertama masuk. `Tasks.md` dibuat (dengan `## Inbox`) kalau belum ada.
 - **Token `~list`** tidak peka huruf besar/kecil dan boleh awalan unik (`~kul` → Kuliah). Kalau tidak ada list yang cocok, task tidak disimpan dan muncul pesan "No list named …". List baru tidak dibuat dari widget: membuat, mengganti nama, dan menghapus list dilakukan di Obsidian dengan mengedit heading.
 - **Move to list** (menu `⋯`) memindahkan task beserta subtask-nya ke akhir list lain, dari `Tasks.md` maupun dari daily note. Antar file urutannya: cek baris di file asal → tulis ke `Tasks.md` → hapus dari file asal (dicek ulang). Kalau langkah terakhir gagal karena file asal berubah, task dibiarkan ada di dua tempat (tidak hilang) dan widget memberi tahu.
@@ -46,25 +57,25 @@ Task yang terpilih ke sebuah grup selalu dibawa bersama subtask-nya; subtask men
 
 ### Lainnya
 
-- **Notes** — selalu isi di bawah heading `## Notes` di daily note hari ini, di tab mana pun. Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
+- **notes** — selalu isi di bawah heading `## Notes` di daily note hari ini, di tab mana pun. Kotaknya bergaris seperti buku tulis (±96px, ±74px di Upcoming; menyusut kalau widget pendek supaya daftar task tetap terlihat). Header-nya tombol lipat ("notes" + chevron); status lipatnya sama untuk semua tab dan diingat. Di kanan header: "today · saved 12:41". Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
 - File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul.
-- Tombol hijau membuka daily note hari ini (atau `Tasks.md` di tab All) di Obsidian, dan membuatnya kalau belum ada.
-- Tombol pin = always-on-top (sama dengan setting "Always on top"). Posisi dan ukuran window diingat.
-
-Keterangan kecil di bawah task: jam di depan teks (`- [ ] 15:00 Rapat`), deadline (merah kalau sudah lewat), daily note asal, dan nama list. Warna lingkaran checkbox menandai prioritas.
+- Always on top diatur di Settings > General (tombol pin di widget sudah tidak ada). Posisi dan ukuran widget diingat.
 
 ### Settings dan tema
 
-- Tombol roda gigi membuka **window Settings** terpisah (atau memfokuskannya kalau sudah terbuka). Setiap perubahan langsung disimpan ke `config.json` dan langsung terlihat di widget — tidak ada tombol Save. Setup pertama kali (pilih vault) tetap di dalam widget.
-  - **General** — Appearance (System / Light / Dark; System mengikuti mode terang/gelap Windows saat itu juga), zoom widget 80–150%, always on top.
+- Tombol roda gigi membuka **window Settings** terpisah, atau memfokuskannya kalau sudah terbuka. Hanya bisa ada satu window Settings: penjagaannya di backend (`open_settings` mengecek dan membuat window di bawah satu kunci), jadi klik berkali-kali dengan cepat pun tidak membuka dua. Window Settings selalu dibuka di tengah dengan ukuran 720×640 (ukurannya tidak diingat). Setiap perubahan langsung disimpan ke `config.json` dan langsung terlihat di widget — tidak ada tombol Save. Setup pertama kali (pilih vault) tetap di dalam widget.
+- Navigasi di sisi kiri (`obsitask. settings` di atas, versi app di bawah); item aktif diberi latar tint aksen dan garis aksen kecil. Tiap halaman punya judul dan subjudul.
+  - **General** — zoom widget 80–150%, **Widget opacity** 40–100% (default 95%; hanya latar panel dan permukaan input/Notes yang transparan, teks, ikon, dan checkbox tetap penuh; berubah langsung saat slider digeser), always on top.
   - **Vault** — folder vault (Browse), folder dan format daily note, heading task dan Notes, file list; tombol "Detect from Obsidian" menyalin folder + format dari plugin Daily notes. Baris yang bermasalah diberi peringatan (folder tidak ada, bukan vault, format tanpa tahun/bulan/hari); vault yang tidak ada tidak disimpan.
-  - **Tasks** — sembunyikan task selesai, list default, Upcoming days, look-back days.
-  - **Themes** — kartu pratinjau setiap tema; varian yang tampil mengikuti Appearance. Tema berlabel "Dark only" / "Light only" selalu memakai varian itu. Window Settings sendiri ikut memakai tema yang dipilih.
+  - **Tasks** — sembunyikan task selesai (di Today dan Upcoming), list default, Upcoming days, look-back days.
+  - **Themes** — Appearance (System / Light / Dark; System mengikuti mode terang/gelap Windows saat itu juga) sebagai segmented control di kanan judul, lalu grid 3 kolom kartu tema: pratinjau mini (latar, tiga task dengan kotak warna prioritas, garis aksen), nama, dan varian yang tersedia ("dark · light" / "dark"). Kartu terpilih diberi bingkai aksen dan lencana centang. Tema yang hanya punya satu varian selalu memakai varian itu. Window Settings sendiri ikut memakai tema yang dipilih. Kredit Terax di bawah grid.
   - **About** — versi, lokasi config, tombol buka folder config, kredit.
-- Penyimpanan dari Settings dan dari tombol pin hanya mengubah field yang disentuh (dibaca ulang dari disk dan dikunci), jadi dua window tidak saling menimpa.
-- **Tema** dipasang lewat `data-theme` dan `data-mode` di `<html>`. Semua warna di CSS lewat variabel (`src/theme.css`); data tema ada di `src/themes.js`. "Default" adalah tampilan asli ObsiTask (dark) plus varian light-nya.
-- Tema lain memakai **nilai warna dari [Terax](https://github.com/crynta/terax-ai)** (Apache License 2.0); hanya nilai warnanya yang diambil, tanpa kode. Pemetaannya: background → panel, card → kartu, cardForeground → teks, mutedForeground → teks redup, border → garis, secondary → kotak input/tombol bulat/segmented, accent → sorotan baris, primary → tombol hijau/checkbox/tab/fokus, destructive → overdue/toast error, terminal ansi[1]/[3]/[4] → prioritas high/medium/low, ansi[6] → tag, terminal selection → seleksi teks.
-- **Kontras**: token yang di bawah WCAG (teks 4.5:1, lingkaran prioritas dan ikon 3:1, diukur di atas kartu) digeser sedikit ke arah warna teks tema itu sampai lolos; daftar token yang diubah tercatat di `adjusted` pada `themes.js`. Default dark sengaja tidak diubah.
+- Penyimpanan dari Settings dan dari widget hanya mengubah field yang disentuh (dibaca ulang dari disk dan dikunci), jadi dua window tidak saling menimpa.
+- **Font**: judul Space Grotesk 600 (dibundel), teks dan judul task Inter (dipanggil lewat nama dari font Windows; cadangannya Segoe UI Variable), label kecil, judul grup, tanggal, jumlah, dan token "Hack Nerd Font" (lewat nama; cadangannya Consolas).
+- **Tema** dipasang lewat `data-theme` dan `data-mode` di `<html>`. Semua warna di CSS lewat variabel (`src/theme.css`); data tema ada di `src/themes.js`.
+- **Default** bergaya Obsidian, hitam + ungu. Dark: panel `#1e1e1e`, permukaan `#262626`, popover `#2a2a2a`, sidebar Settings `#181818`, kartu tema `#242424`, teks `#dadada` / redup `#a3a3a3` / samar `#8c8c8c`, aksen `#8a6cef` (teks di atasnya `#121212`, teks aksen `#ab94f7`), prioritas `#ff8a5c` / `#f2c14e` / `#5aa9ff` / tanpa `#6e6e6e`, overdue `#ff8a5c`. Light: latar `#ffffff`, permukaan `#f6f6f6`, teks `#222222` / `#5c5c5c` / `#6b6b6b`, aksen `#7a5af0`, prioritas `#c2410c` / `#a16207` / `#1d4ed8` / tanpa `#8a8a8a`.
+- Tema lain memakai **nilai warna dari [Terax](https://github.com/crynta/terax-ai)** (Apache License 2.0); hanya nilai warnanya yang diambil, tanpa kode. Pemetaannya: background → panel, card → kartu (Settings), cardForeground → teks, mutedForeground → teks redup, border → garis, secondary → permukaan (quick-add, Notes), accent → hover dan latar list terbuka, primary → aksen (checkbox, tab, fokus), destructive → overdue/toast error, terminal ansi[1]/[3]/[4] → prioritas high/medium/low, ansi[6] → tag, terminal selection → seleksi teks.
+- **Kontras**: token tema Terax yang di bawah WCAG (teks 4.5:1, kotak prioritas dan ikon 3:1) digeser sedikit ke arah warna teks tema itu sampai lolos. Karena teks task sekarang langsung di atas panel (tanpa kartu), kontras diukur terhadap panel, permukaan, dan kartu sekaligus (yang terburuk); daftar token yang diubah tercatat di `adjusted` pada `themes.js`. Default memakai nilai di atas apa adanya.
 
 ## Build di Windows
 
@@ -85,9 +96,10 @@ Saat pertama dijalankan, pilih folder vault. Folder dan format daily note diisi 
 ```
 src/                  frontend
   index.html          widget (+ setup pertama kali)
+  fonts/              Space Grotesk (+ lisensi OFL)
   main.js             buka index.html langsung di browser = mode contoh data
   style.css           tata letak widget; semua warna lewat variabel
-  theme.css           token warna + warna turunan (dipakai widget dan Settings)
+  theme.css           token warna, warna turunan, font, opacity (dipakai widget dan Settings)
   themes.js           data tema (Default + warna Terax) dan applyTheme()
   settings.html       window Settings (settings.js, settings.css); bisa dibuka langsung di browser
 src-tauri/
@@ -111,7 +123,7 @@ Config tersimpan di `%APPDATA%\com.kekensya.obsitask\config.json`.
 - Memindahkan task dari `Tasks.md` kembali ke daily note.
 - Recurring task, reminder/notifikasi, pomodoro, smart list/filter kustom, tag view, arsip task selesai, drag-and-drop reorder, sinkronisasi.
 - Prioritas `🔺` / `⏬` plugin Tasks tidak dikelola (dibiarkan apa adanya di baris).
-- Efek blur ke desktop (acrylic/mica) dan gambar latar. Panel sekarang semi-transparan biasa.
+- Efek blur ke desktop (acrylic/mica) dan gambar latar. Panel hanya bisa diatur opacity-nya.
 - Membuat atau mengedit tema sendiri dari widget, dan shortcut keyboard yang bisa diatur.
 - Tray icon dan autostart saat Windows menyala.
 

@@ -325,6 +325,9 @@ fn get_config(app: AppHandle) -> Result<Config, String> {
 /// menyimpan hampir bersamaan.
 static CONFIG_LOCK: Mutex<()> = Mutex::new(());
 
+/// Hanya satu window Settings: lihat `open_settings`.
+static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
+
 /// Simpan seluruh config (setup pertama kali).
 #[tauri::command]
 fn save_config(app: AppHandle, config: Config) -> Result<Config, String> {
@@ -374,6 +377,12 @@ fn check_config(config: Config) -> Vec<config::Check> {
 /// window dari command sinkron bisa macet di Windows.
 #[tauri::command]
 async fn open_settings(app: AppHandle) -> Result<(), String> {
+    // Command async bisa berjalan bersamaan (klik gear cepat berkali-kali), dan
+    // window baru tercatat dengan labelnya baru setelah build() selesai. Tanpa
+    // kunci, setiap panggilan melihat "belum ada" dan membuat window sendiri.
+    // Dengan kunci, cek + buat jadi satu langkah: panggilan berikutnya menunggu,
+    // lalu menemukan window yang sudah ada dan memfokuskannya.
+    let _guard = SETTINGS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(win) = app.get_webview_window("settings") {
         let _ = win.unminimize();
         let _ = win.show();
@@ -691,7 +700,10 @@ fn open_in_obsidian(app: AppHandle, offset: i64, source: Option<String>) -> Resu
 pub fn run() {
     tauri::Builder::default()
         .manage(Caches::default())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Posisi/ukuran widget diingat. Window Settings tidak: ia selalu dibuka di
+        // tengah dengan ukuran tetap, dan ukuran tersimpan yang salah (piksel
+        // fisik dibaca sebagai logis di layar 175%) membuatnya terlalu kecil.
+        .plugin(tauri_plugin_window_state::Builder::default().with_denylist(&["settings"]).build())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_config,

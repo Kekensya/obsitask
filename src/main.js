@@ -26,19 +26,26 @@ const appWindow = tauri ? tauri.window.getCurrentWindow() : null;
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  date: $("date"),
-  tabs: [...document.querySelectorAll(".segmented button")],
+  panel: $("panel"),
+  title: $("title"),
+  titleMeta: $("title-meta"),
+  tabs: [...document.querySelectorAll(".tabs button")],
+  todayBadge: $("today-badge"),
+  week: $("week"),
   tasks: $("tasks"),
   empty: $("empty"),
-  count: $("count"),
-  showDone: $("btn-completed"),
   open: $("btn-open"),
   addForm: $("add-form"),
   addInput: $("add-input"),
+  addMirror: $("add-mirror"),
+  addPreview: $("add-preview"),
   addPriority: $("add-priority"),
   addDue: $("add-due"),
   addDueLabel: $("add-due-label"),
+  suggest: $("suggest"),
   popover: $("popover"),
+  notesSection: $("notes-section"),
+  notesToggle: $("notes-toggle"),
   notes: $("notes"),
   notesStatus: $("notes-status"),
   toast: $("toast"),
@@ -52,11 +59,14 @@ const state = {
   view: null,
   lastJson: "",
   notesDirty: false,
+  notesNote: "", // "saving…" / "saved 12:41" / "not saved"
   saveTimer: null,
   busy: false,
   editing: false, // judul task sedang diedit inline
   stale: false, // ada data baru yang belum digambar (ditahan selama edit/popover)
-  draft: { priority: null, due: null }, // pilihan tombol di kotak "Add a task"
+  draft: { priority: null, due: null }, // pilihan tombol di kotak quick-add
+  dayFilter: null, // tanggal yang dipilih di strip Upcoming (null = semua)
+  addingList: null, // list di tab All yang input "Add to …"-nya terbuka
 };
 
 const ICON = {
@@ -119,13 +129,50 @@ function dayLabel(iso) {
   return d.toLocaleDateString("en-US", opts);
 }
 
-/** Judul grup tanggal di tab Upcoming: "Tomorrow" / "Thu, Nov 20". */
-function dateHeading(iso) {
-  if (iso === isoPlus(1)) return "Tomorrow";
+/** "Nov 18" / "Jan 3, 2027" (tahun hanya kalau bukan tahun ini). */
+function shortDate(iso) {
+  const d = parseIso(iso);
+  const opts = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-US", opts);
+}
+
+/** "Wed, Nov 18" (tahun hanya kalau bukan tahun ini). */
+function longDate(iso) {
   const d = parseIso(iso);
   const opts = { weekday: "short", month: "short", day: "numeric" };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
   return d.toLocaleDateString("en-US", opts);
+}
+
+const weekday = (iso) => parseIso(iso).toLocaleDateString("en-US", { weekday: "short" });
+
+/** Judul grup tanggal di tab Upcoming: "tomorrow · wed" / "thu · nov 20". */
+function dateHeading(iso) {
+  const wd = weekday(iso).toLowerCase();
+  return iso === isoPlus(1) ? `tomorrow · ${wd}` : `${wd} · ${shortDate(iso).toLowerCase()}`;
+}
+
+/** Selisih hari kalender a - b (tanggal ISO). */
+const daysBetween = (a, b) => Math.round((parseIso(a) - parseIso(b)) / 86400000);
+
+/** Rentang Upcoming untuk judul: "Nov 18 – 24" / "Nov 28 – Dec 4" / "Nov 18". */
+function rangeLabel(days) {
+  const from = isoPlus(1);
+  const to = isoPlus(days);
+  if (from === to) return shortDate(from);
+  const a = parseIso(from);
+  const b = parseIso(to);
+  const sameMonth = a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+  return `${shortDate(from)} – ${sameMonth ? b.getDate() : shortDate(to)}`;
+}
+
+/** Tanggal selesai di grup Completed: "Today" / "Yesterday" / "Nov 15". */
+function doneLabel(iso) {
+  if (!iso) return "";
+  if (iso === isoToday()) return "Today";
+  if (iso === isoPlus(-1)) return "Yesterday";
+  return shortDate(iso);
 }
 
 /* ---------- Rendering ---------- */
@@ -148,27 +195,31 @@ function h(tag, props = {}, ...children) {
 const isClosed = (task) => task.done || task.cancelled;
 
 /**
- * Judul (HTML) + keterangan kecil (jam, deadline, asal) dari sebuah task.
- * `hideDue`: tanggal yang sudah jelas dari grupnya, jadi tidak perlu ditulis.
+ * Judul (HTML) + bagian keterangan kecil dari sebuah task, mis.
+ * "2d late · Nov 15 · kuliah". `hideDue`: tanggal yang sudah jelas dari
+ * grupnya, jadi tidak perlu ditulis.
  */
 function describeTask(task, { hideDue } = {}) {
   let text = task.title;
-  const subs = [];
-  let overdue = false;
+  const subs = []; // [teks, kelas]
 
   // Jam di depan: "15:00 Rapat" atau "15:00-16:00 Rapat"
   const time = text.match(/^(\d{1,2}[:.]\d{2})(?:\s*[-–]\s*(\d{1,2}[:.]\d{2}))?\s+/);
   if (time) {
-    subs.push(time[2] ? `${time[1]} – ${time[2]}` : time[1]);
+    subs.push([time[2] ? `${time[1]}–${time[2]}` : time[1]]);
     text = text.slice(time[0].length);
   }
 
-  if (task.due && task.due !== hideDue) {
-    overdue = !isClosed(task) && task.due < isoToday();
-    subs.push((overdue ? "Overdue · " : "Due ") + dayLabel(task.due));
+  const today = isoToday();
+  if (task.due && !isClosed(task) && task.due < today) {
+    subs.push([`${daysBetween(today, task.due)}d late`, "late"], [shortDate(task.due)]);
+  } else if (task.due && task.due !== hideDue) {
+    subs.push([task.due === today ? "today" : task.due === isoPlus(1) ? "tomorrow" : shortDate(task.due)]);
   }
   // Task dari daily note hari lain: sebut asalnya (sekali, di task induk).
-  if (task.date && task.level === 0) subs.push("from " + dayLabel(task.date));
+  if (task.date && task.level === 0) subs.push(["from " + shortDate(task.date)]);
+  // Di Today / Upcoming, task dari Tasks.md diberi nama list-nya.
+  if (task.list && state.tab !== "all" && task.level === 0) subs.push([task.list.toLowerCase()]);
 
   const html = escapeHtml(text)
     .replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") // [[link|alias]] -> alias
@@ -176,7 +227,7 @@ function describeTask(task, { hideDue } = {}) {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|\s)(#[^\s#]+)/g, '$1<span class="tag">$2</span>');
 
-  return { html, sub: subs.join(" · "), overdue };
+  return { html, subs };
 }
 
 /**
@@ -206,8 +257,9 @@ function sortTasks(tasks) {
   return flatten(roots);
 }
 
+/** Satu baris task. `doneDate`: tampilkan tanggal selesai di kanan (grup Completed). */
 function renderTask(task, opts = {}) {
-  const { html, sub, overdue } = describeTask(task, opts);
+  const { html, subs } = describeTask(task, opts);
   const box = h("button", {
     class: "box",
     role: "checkbox",
@@ -236,37 +288,38 @@ function renderTask(task, opts = {}) {
     html: ICON.more,
     onclick: () => openTaskMenu(task, more),
   });
-  // Di Today / Upcoming, task dari Tasks.md diberi label nama list-nya.
-  const label = task.list && state.tab !== "all" && task.level === 0 && h("span", { class: "list-label" }, task.list);
-  const li = h(
+  const sub =
+    subs.length > 0 &&
+    h(
+      "div",
+      { class: "sub" },
+      ...subs.flatMap(([text, cls], i) => [i ? " · " : null, h("span", { class: cls || null }, text)]).filter(Boolean)
+    );
+  const doneDate = opts.doneDate && task.done_date && h("span", { class: "done-date" }, doneLabel(task.done_date));
+  return h(
     "li",
     {
       class: `task p-${task.priority}` + (task.done ? " done" : "") + (task.cancelled ? " cancelled" : ""),
-      style: `padding-left:${4 + task.level * 18}px`,
+      style: `padding-left:${4 + task.level * 28}px`,
       oncontextmenu: (e) => {
         e.preventDefault();
         openTaskMenu(task, more);
       },
     },
     box,
-    h(
-      "div",
-      { class: "body" },
-      title,
-      (sub || label) && h("div", { class: "sub" }, sub && h("span", { class: overdue ? "overdue" : "" }, sub), label)
-    ),
-    more
+    h("div", { class: "main" }, h("div", { class: "body" }, title, sub), doneDate, more)
   );
-  return li;
 }
 
+const CHEV = '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+
 /**
- * Label kecil pemisah grup di daftar. Dengan `onToggle`, label bisa dilipat.
- * `kind: "list"` = judul list di tab All (lebih menonjol, jumlah netral).
+ * Judul grup (mono, huruf kecil). Dengan `onToggle`, grup bisa dilipat.
+ * `kind: "alert"` = oranye (overdue).
  */
 function groupLabel(text, { count, collapsed, onToggle, kind } = {}) {
   const inner = [
-    onToggle && h("span", { class: "chev", html: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>' }),
+    onToggle && h("span", { class: "chev", html: CHEV }),
     h("span", {}, text),
     count != null && h("span", { class: "group-count" }, String(count)),
   ];
@@ -296,8 +349,29 @@ function foldGroup(text, pref, defaultCollapsed, count, kind) {
 const visible = (tasks, hideDone) => sortTasks(tasks).filter((t) => !hideDone || !isClosed(t));
 const roots = (tasks) => tasks.filter((t) => t.level === 0);
 const openRoots = (tasks) => roots(tasks).filter((t) => !isClosed(t)).length;
+/** Jumlah task terbuka di sebuah list (termasuk subtask), sama dengan judul list. */
+const openCount = (list) => list.tasks.filter((t) => !isClosed(t)).length;
 
-/** Input kecil "Add to <list>…" di akhir tiap list pada tab All. */
+/** Pecah task menjadi blok: induk level 0 + subtask-nya. */
+function blocksOf(tasks) {
+  const blocks = [];
+  for (const t of tasks) {
+    if (t.level === 0 || !blocks.length) blocks.push([t]);
+    else blocks[blocks.length - 1].push(t);
+  }
+  return blocks;
+}
+
+/* ---------- Tab All ---------- */
+
+const isCompletedOpen = (name) => readPref("completedOpenLists", []).some((n) => sameList(n, name));
+function toggleCompletedOpen(name) {
+  const open = readPref("completedOpenLists", []).filter((n) => !sameList(n, name));
+  if (!isCompletedOpen(name)) open.push(name);
+  writePref("completedOpenLists", open);
+}
+
+/** Input "Add to <list>…" di akhir list, muncul setelah tombol + diklik. */
 function listAddRow(name) {
   const input = h("input", {
     class: "list-add",
@@ -308,10 +382,15 @@ function listAddRow(name) {
     "data-list": name,
     title: "Enter to add. Tokens like !high and @tomorrow work here too.",
   });
+  const closeRow = () => {
+    if (state.addingList !== name) return;
+    state.addingList = null;
+    renderTasks(state.view);
+  };
   input.addEventListener("keydown", async (e) => {
     if (e.key === "Escape") {
       input.value = "";
-      input.blur();
+      closeRow();
       return;
     }
     if (e.key !== "Enter") return;
@@ -325,44 +404,93 @@ function listAddRow(name) {
     if (!result) again.value = text; // gagal: kembalikan teksnya
     again.focus();
   });
-  input.addEventListener("blur", () => setTimeout(releaseHold));
-  return h("li", { class: "list-add-row" }, h("span", { class: "plus", html: ICON.plus }), input);
+  input.addEventListener("blur", () =>
+    setTimeout(() => {
+      // Pindah fokus ke luar tanpa teks = tutup input-nya.
+      if (!input.value.trim() && document.activeElement?.dataset?.list !== name) closeRow();
+      releaseHold();
+    }, 120)
+  );
+  return h("li", { class: "list-add-row" }, h("span", { class: "plus" }, "+"), input);
 }
 
-/** Tab All: semua list di Tasks.md, sesuai urutan heading di file. */
-function renderLists(view) {
-  const showDone = readPref("showCompleted", false);
-  const lists = view.lists || [];
-  const open = lists.reduce((n, l) => n + l.tasks.filter((t) => !isClosed(t)).length, 0);
-  el.count.textContent = `${open} open`;
-  el.showDone.hidden = false;
-  el.showDone.textContent = showDone ? "Hide completed" : "Show completed";
-  el.showDone.setAttribute("aria-pressed", String(showDone));
+/** Satu list di tab All: kepala (lipat, nama, jumlah, +), task terbuka, Completed. */
+function renderListBlock(list) {
+  // Task dari Tasks.md membawa sumber + nama list-nya, untuk command tulis.
+  const tasks = list.tasks.map((t) => ({ ...t, source: "tasks", list: list.name }));
+  const collapsed = isListCollapsed(list.name);
+  const toggle = () => {
+    toggleListCollapsed(list.name);
+    if (isListCollapsed(list.name) && state.addingList === list.name) state.addingList = null;
+    renderTasks(state.view);
+  };
+  const plus = h("button", {
+    type: "button",
+    class: "list-plus",
+    title: `Add a task to ${list.name}`,
+    "aria-label": `Add a task to ${list.name}`,
+    html: ICON.plus,
+    onclick: () => {
+      state.addingList = list.name;
+      if (isListCollapsed(list.name)) toggleListCollapsed(list.name);
+      renderTasks(state.view);
+      const input = [...el.tasks.querySelectorAll(".list-add")].find((i) => i.dataset.list === list.name);
+      if (input) {
+        input.scrollIntoView({ block: "nearest" });
+        input.focus();
+      }
+    },
+  });
+  const head = h(
+    "div",
+    { class: "list-head" },
+    h(
+      "button",
+      { type: "button", class: "list-toggle", "aria-expanded": String(!collapsed), onclick: toggle },
+      h("span", { class: "chev", html: CHEV }),
+      h("span", { class: "list-name" }, list.name),
+      h("span", { class: "list-count" }, String(tasks.filter((t) => !isClosed(t)).length))
+    ),
+    plus
+  );
+  const block = h("li", { class: "list-block" + (collapsed ? "" : " open") }, head);
+  if (collapsed) return block;
 
-  const rows = [];
-  for (const list of lists) {
-    // Task dari Tasks.md membawa sumber + nama list-nya, untuk command tulis.
-    const tasks = list.tasks.map((t) => ({ ...t, source: "tasks", list: list.name }));
-    const collapsed = isListCollapsed(list.name);
+  // Blok dengan induk selesai/dibatalkan masuk Completed; sisanya tampil biasa.
+  const blocks = blocksOf(tasks);
+  const open = blocks.filter((b) => !isClosed(b[0])).flat();
+  const closed = blocks
+    .filter((b) => isClosed(b[0]))
+    .sort((a, b) => (b[0].done_date || "").localeCompare(a[0].done_date || "") || a[0].line - b[0].line);
+  const rows = sortTasks(open).map((t) => renderTask(t));
+  if (state.addingList === list.name) rows.push(listAddRow(list.name));
+  if (!open.length && state.addingList !== list.name) rows.push(h("li", { class: "list-empty" }, closed.length ? "All done." : "No tasks."));
+  if (closed.length) {
+    const shown = isCompletedOpen(list.name);
     rows.push(
-      groupLabel(list.name, {
-        kind: "list",
-        count: tasks.filter((t) => !isClosed(t)).length,
-        collapsed,
+      groupLabel("Completed", {
+        count: closed.length,
+        collapsed: !shown,
         onToggle: () => {
-          toggleListCollapsed(list.name);
+          toggleCompletedOpen(list.name);
           renderTasks(state.view);
         },
       })
     );
-    if (collapsed) continue;
-    rows.push(...visible(tasks, !showDone).map((t) => renderTask(t)));
-    rows.push(listAddRow(list.name));
+    if (shown) rows.push(...closed.flatMap((b) => sortTasks(b)).map((t) => renderTask(t, { doneDate: true })));
   }
-  return { rows, message: "" };
+  block.append(h("ul", { class: "list-tasks" }, ...rows));
+  return block;
 }
 
-/** Tab Today: Overdue, Today (due hari ini + daily note hari ini), Completed today. */
+/** Tab All: semua list di Tasks.md, sesuai urutan heading di file. */
+function renderLists(view) {
+  return { rows: (view.lists || []).map(renderListBlock), message: view.lists?.length ? "" : "No lists yet." };
+}
+
+/* ---------- Tab Today ---------- */
+
+/** Tab Today: overdue, today (due hari ini + daily note hari ini), done today. */
 function renderToday(view) {
   const a = view.agenda;
   const hide = view.hide_completed;
@@ -370,54 +498,96 @@ function renderToday(view) {
   const overdue = visible(a.overdue, hide);
   const due = visible(a.today, hide);
   const done = sortTasks(a.done);
-  const open = openRoots(a.overdue) + openRoots(a.today);
-  el.count.textContent = open || done.length ? `${open} open` : "";
 
   const rows = [];
-  if (!overdue.length && !due.length && !done.length) return { rows, message: "Nothing for today. Add a task above." };
+  if (!overdue.length && !due.length && !done.length) return { rows, message: "Nothing for today. Add a task below." };
   if (overdue.length) {
-    const g = foldGroup("Overdue", "overdueCollapsed", false, roots(a.overdue).length, "alert");
+    const g = foldGroup("overdue", "overdueCollapsed", false, roots(a.overdue).length, "alert");
     rows.push(g.label);
     if (!g.collapsed) rows.push(...overdue.map((t) => renderTask(t)));
   }
-  rows.push(groupLabel("Today", { count: openRoots(a.today) }));
+  rows.push(groupLabel("today", { count: openRoots(a.today) }));
   if (due.length) rows.push(...due.map((t) => renderTask(t, { hideDue: today })));
   else rows.push(h("li", { class: "group-empty" }, a.today.length ? "All done." : "Nothing due today."));
   if (done.length) {
-    const g = foldGroup("Completed today", "doneTodayCollapsed", true, roots(a.done).length);
+    const g = foldGroup("done today", "doneTodayCollapsed", true, roots(a.done).length);
     rows.push(g.label);
     if (!g.collapsed) rows.push(...done.map((t) => renderTask(t)));
   }
   return { rows, message: "" };
 }
 
-/** Tab Upcoming: deadline besok sampai N hari ke depan, dikelompokkan per tanggal. */
-function renderUpcoming(view) {
+/* ---------- Tab Upcoming ---------- */
+
+/** Task Upcoming per tanggal; blok (induk + subtask) ikut tanggal induknya. */
+function upcomingByDate(view) {
   const byDate = new Map();
   let date = null;
-  // Item datang sebagai blok (induk level 0 + subtask); blok ikut tanggal induknya.
   for (const t of view.agenda.upcoming) {
     if (t.level === 0) date = t.due;
     if (!byDate.has(date)) byDate.set(date, []);
     byDate.get(date).push(t);
   }
-  el.count.textContent = byDate.size ? `${openRoots(view.agenda.upcoming)} open` : "";
+  return byDate;
+}
+
+/** Strip 7 hari: huruf hari, tanggal, batang sesuai jumlah task. Klik = filter. */
+function renderWeek(view) {
+  const byDate = upcomingByDate(view);
+  const days = Array.from({ length: 7 }, (_, i) => isoPlus(i + 1));
+  const counts = days.map((d) => openRoots(byDate.get(d) || []));
+  const max = Math.max(1, ...counts);
+  const buttons = days.map((iso, i) => {
+    const n = counts[i];
+    const inRange = i < view.upcoming_days;
+    const picked = state.dayFilter === iso;
+    const d = parseIso(iso);
+    return h(
+      "button",
+      {
+        type: "button",
+        class: "day" + (n ? "" : " zero") + (inRange ? "" : " off"),
+        "aria-pressed": String(picked),
+        disabled: !inRange,
+        title: inRange ? `${longDate(iso)} · ${n} open${picked ? " · click to show all" : ""}` : "Outside Upcoming days (Settings)",
+        onclick: () => {
+          state.dayFilter = picked ? null : iso;
+          renderTasks(state.view);
+        },
+      },
+      h("span", { class: "wd" }, d.toLocaleDateString("en-US", { weekday: "narrow" })),
+      h("span", { class: "dn" }, String(d.getDate())),
+      h("span", { class: "bar-slot" }, h("span", { class: "bar", style: n ? `height:${3 + Math.round((11 * n) / max)}px` : null }))
+    );
+  });
+  el.week.replaceChildren(...buttons);
+}
+
+/** Tab Upcoming: deadline besok sampai N hari ke depan, per tanggal. */
+function renderUpcoming(view) {
+  renderWeek(view);
+  const byDate = upcomingByDate(view);
   const n = view.upcoming_days;
   const rows = [];
   for (const d of [...byDate.keys()].sort()) {
+    if (state.dayFilter && d !== state.dayFilter) continue;
     const tasks = byDate.get(d);
     rows.push(groupLabel(dateHeading(d), { count: openRoots(tasks) }));
     rows.push(...visible(tasks, view.hide_completed).map((t) => renderTask(t, { hideDue: d })));
   }
-  const message = rows.length ? "" : `Nothing due in the next ${n === 1 ? "day" : n + " days"}.`;
+  let message = "";
+  if (!rows.length) message = state.dayFilter ? `Nothing due on ${longDate(state.dayFilter)}.` : `Nothing due in the next ${n === 1 ? "day" : n + " days"}.`;
   return { rows, message };
 }
 
 function renderTasks(view) {
-  if (state.tab !== "all") el.showDone.hidden = true;
+  el.week.hidden = state.tab !== "upcoming";
   const render = { today: renderToday, upcoming: renderUpcoming, all: renderLists }[state.tab];
+  // Input "Add to …" yang sedang fokus dibuat ulang: kembalikan fokusnya.
+  const focused = document.activeElement?.classList.contains("list-add") ? document.activeElement.dataset.list : null;
   const { rows, message } = render(view);
   el.tasks.replaceChildren(...rows);
+  if (focused) [...el.tasks.querySelectorAll(".list-add")].find((i) => i.dataset.list === focused)?.focus();
   // Pesan besar di tengah hanya kalau tidak ada apa pun untuk ditampilkan.
   el.empty.textContent = message;
   el.empty.hidden = !message;
@@ -439,18 +609,35 @@ function releaseHold() {
   if (state.stale && !isHeld() && state.view) renderTasks(state.view);
 }
 
-const TITLES = { upcoming: "Upcoming", all: "All lists" };
+/** Judul + keterangan kanannya, badge Today, dan teks lain yang ikut data. */
+function renderChrome(view) {
+  const a = view.agenda;
+  const openToday = openRoots(a.overdue) + openRoots(a.today);
+  el.todayBadge.textContent = String(openToday);
+  el.todayBadge.hidden = !openToday;
+  el.todayBadge.title = `${openToday} open`;
+  if (state.tab === "today") {
+    el.title.textContent = parseIso(view.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    el.titleMeta.textContent = "";
+  } else if (state.tab === "upcoming") {
+    el.title.textContent = "Upcoming";
+    el.titleMeta.textContent = rangeLabel(view.upcoming_days);
+  } else {
+    el.title.textContent = "All lists";
+    el.titleMeta.textContent = `${(view.lists || []).reduce((n, l) => n + openCount(l), 0)} open`;
+  }
+  const where = state.tab === "all" ? view.tasks_file : view.file;
+  el.open.title = `Open ${where || "note"} in Obsidian`;
+}
 
 function applyView(view) {
   state.view = view;
   state.lastJson = JSON.stringify(view);
-  el.date.textContent =
-    TITLES[state.tab] || parseIso(view.date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  el.addInput.placeholder = state.tab === "today" ? "Add a task for today…" : `Add to ${view.default_list}…`;
-  const where = state.tab === "all" ? view.tasks_file : view.file;
-  el.open.title = `Open ${where || "note"} in Obsidian`;
+  if (state.dayFilter && state.dayFilter <= isoToday()) state.dayFilter = null; // hari sudah berganti
+  renderChrome(view);
   if (isHeld()) state.stale = true;
   else renderTasks(view);
+  renderDraft();
 
   // Jangan timpa notes yang sedang diketik.
   const editing = state.notesDirty || document.activeElement === el.notes;
@@ -685,32 +872,67 @@ document.addEventListener("pointerdown", (e) => {
 el.tasks.addEventListener("scroll", closePopover);
 window.addEventListener("resize", closePopover);
 
-/* ---------- Tambah task ---------- */
+/* ---------- Quick-add ---------- */
+
+const PRIORITY_TOKENS = { "!high": "high", "!med": "medium", "!medium": "medium", "!low": "low", "!none": "none" };
+
+/** Jenis token quick-add untuk satu kata: "prio" / "date" / "list" / null. */
+function tokenKind(word) {
+  const w = word.toLowerCase();
+  if (PRIORITY_TOKENS[w]) return "prio";
+  if (w === "@today" || w === "@tomorrow") return "date";
+  if (/^@\d{4}-\d{2}-\d{2}$/.test(w) && isoOf(parseIso(w.slice(1))) === w.slice(1)) return "date";
+  if (/^~\p{L}/u.test(word)) return "list";
+  return null;
+}
 
 /**
  * Baca token quick-add (!high, @tomorrow, ~list, ...) dari input. Hanya untuk
- * pratinjau di tombol dan untuk mode contoh; yang berlaku tetap parser di tasks.rs.
+ * pratinjau dan untuk mode contoh; yang berlaku tetap parser di tasks.rs.
  */
 function quickTokens(text) {
   const out = { title: [], priority: null, due: null, list: null };
-  const names = { "!high": "high", "!med": "medium", "!medium": "medium", "!low": "low", "!none": "none" };
   for (const word of text.split(/\s+/).filter(Boolean)) {
     const w = word.toLowerCase();
-    if (names[w]) out.priority = names[w];
-    else if (w === "@today") out.due = isoToday();
-    else if (w === "@tomorrow") out.due = isoPlus(1);
-    else if (/^@\d{4}-\d{2}-\d{2}$/.test(w) && isoOf(parseIso(w.slice(1))) === w.slice(1)) out.due = w.slice(1);
-    else if (/^~\p{L}/u.test(word)) out.list = word.slice(1);
+    const kind = tokenKind(word);
+    if (kind === "prio") out.priority = PRIORITY_TOKENS[w];
+    else if (kind === "date") out.due = w === "@today" ? isoToday() : w === "@tomorrow" ? isoPlus(1) : w.slice(1);
+    else if (kind === "list") out.list = word.slice(1);
     else out.title.push(word);
   }
   out.title = out.title.join(" ");
   return out;
 }
 
+const listNames = () => (state.view?.lists || []).map((l) => l.name);
+
+/**
+ * Warnai token yang dikenali seperti chip. Input aslinya transparan di atas
+ * "cermin" ini, jadi perilakunya tetap input teks biasa; cermin hanya ikut
+ * isi dan posisi gulir horizontalnya.
+ */
+function renderMirror() {
+  const names = listNames();
+  const html = el.addInput.value
+    .split(/(\s+)/)
+    .map((part) => {
+      if (!part || /^\s+$/.test(part)) return escapeHtml(part);
+      let kind = tokenKind(part);
+      if (kind === "list" && !resolveList(names, part.slice(1))) kind = null; // list tak dikenal: teks biasa
+      return kind ? `<span class="tok ${kind}">${escapeHtml(part)}</span>` : escapeHtml(part);
+    })
+    .join("");
+  el.addMirror.innerHTML = html;
+  el.addMirror.scrollLeft = el.addInput.scrollLeft;
+}
+
 /** Deadline task baru: tombol, lalu token, lalu "hari ini" kalau ditambah dari tab Today. */
 const draftDue = (typed) => state.draft.due || typed.due || (state.tab === "today" ? isoToday() : null);
 
-/** Tombol prioritas/tanggal mencerminkan pilihan tombol atau token yang diketik. */
+/** "Today" / "Wed, Nov 18". */
+const dueWords = (iso) => (iso === isoToday() ? "Today" : longDate(iso));
+
+/** Tombol prioritas/tanggal, warna token, dan baris pratinjau hasil. */
 function renderDraft() {
   const typed = quickTokens(el.addInput.value);
   const priority = state.draft.priority || typed.priority || "none";
@@ -720,9 +942,141 @@ function renderDraft() {
   el.addDue.classList.toggle("set", !!due);
   el.addDue.title = due ? `Due ${dayLabel(due)}` : "Due date";
   el.addDueLabel.textContent = due ? dayLabel(due).replace(/^t/, "T") : "";
+  renderMirror();
+
+  // Pratinjau: "→ Kuliah · High · Wed, Nov 18"
+  const text = el.addInput.value.trim();
+  el.addPreview.hidden = !text || !state.view;
+  if (el.addPreview.hidden) return;
+  const parts = [];
+  if (typed.list && !resolveList(listNames(), typed.list)) {
+    el.addPreview.replaceChildren(h("span", { class: "warn" }, `→ No list named "${typed.list}"`));
+    return;
+  }
+  parts.push((typed.list && resolveList(listNames(), typed.list)) || state.view.default_list);
+  if (priority !== "none") parts.push(PRIORITIES.find((p) => p.id === priority).label);
+  if (due) parts.push(dueWords(due));
+  if (!typed.title) parts.push("needs a title");
+  el.addPreview.textContent = "→ " + parts.join(" · ");
 }
 
-el.addInput.addEventListener("input", renderDraft);
+/* --- Saran list saat mengetik "~" --- */
+
+const suggest = { items: [], index: 0, start: 0, end: 0 };
+
+/** Kata "~…" tempat caret berada, atau null. */
+function tildeAtCaret() {
+  const input = el.addInput;
+  if (input.selectionStart !== input.selectionEnd) return null;
+  const pos = input.selectionStart;
+  const before = input.value.slice(0, pos);
+  const m = before.match(/(^|\s)~([^\s~]*)$/);
+  if (!m) return null;
+  const after = input.value.slice(pos).match(/^[^\s]*/)[0];
+  return { start: pos - m[2].length - 1, end: pos + after.length, query: m[2] };
+}
+
+function closeSuggest() {
+  el.suggest.hidden = true;
+  suggest.items = [];
+}
+
+function renderSuggest() {
+  const at = state.view && document.activeElement === el.addInput ? tildeAtCaret() : null;
+  if (!at) return closeSuggest();
+  const q = at.query.toLowerCase();
+  const lists = state.view.lists || [];
+  const starts = lists.filter((l) => l.name.toLowerCase().startsWith(q));
+  const contains = lists.filter((l) => !starts.includes(l) && q && l.name.toLowerCase().includes(q));
+  const items = [...starts, ...contains].slice(0, 8);
+  if (!items.length) return closeSuggest();
+  const same = items.map((l) => l.name).join("\n") === suggest.items.map((l) => l.name).join("\n");
+  suggest.items = items;
+  suggest.index = same ? Math.min(suggest.index, items.length - 1) : 0;
+  suggest.start = at.start;
+  suggest.end = at.end;
+  el.suggest.replaceChildren(
+    h("div", { class: "suggest-head" }, "lists · Tab to pick"),
+    ...items.map((l, i) =>
+      h(
+        "button",
+        {
+          type: "button",
+          role: "option",
+          tabindex: "-1",
+          "aria-selected": String(i === suggest.index),
+          onpointerdown: (e) => e.preventDefault(), // input tetap fokus
+          onclick: () => pickSuggest(i),
+        },
+        h("span", { class: "tilde" }, "~"),
+        h("span", { class: "name" }, l.name),
+        h("span", { class: "n" }, String(openCount(l)))
+      )
+    )
+  );
+  el.suggest.hidden = false;
+}
+
+/** Ganti kata "~…" dengan token list yang pasti dikenali. */
+function pickSuggest(i) {
+  const list = suggest.items[i];
+  if (!list) return;
+  const names = listNames();
+  // Token berhenti di spasi: untuk nama berspasi, pakai kata pertamanya kalau unik.
+  const first = list.name.split(/\s+/)[0];
+  const token = "~" + (resolveList(names, first) === list.name ? first : list.name.replace(/\s+/g, ""));
+  const v = el.addInput.value;
+  const rest = v.slice(suggest.end).replace(/^\s*/, "");
+  el.addInput.value = v.slice(0, suggest.start) + token + " " + rest;
+  const caret = suggest.start + token.length + 1;
+  el.addInput.setSelectionRange(caret, caret);
+  closeSuggest();
+  renderDraft();
+}
+
+const syncAdd = () => {
+  renderDraft();
+  renderSuggest();
+};
+el.addInput.addEventListener("input", syncAdd);
+el.addInput.addEventListener("click", renderSuggest);
+el.addInput.addEventListener("keyup", (e) => {
+  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) renderSuggest();
+  el.addMirror.scrollLeft = el.addInput.scrollLeft;
+});
+el.addInput.addEventListener("scroll", () => (el.addMirror.scrollLeft = el.addInput.scrollLeft));
+el.addInput.addEventListener("select", () => (el.addMirror.scrollLeft = el.addInput.scrollLeft));
+el.addInput.addEventListener("blur", () => setTimeout(closeSuggest, 100));
+
+el.addInput.addEventListener("keydown", (e) => {
+  if (!el.suggest.hidden && suggest.items.length) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = suggest.items.length;
+      suggest.index = (suggest.index + (e.key === "ArrowDown" ? 1 : n - 1)) % n;
+      renderSuggest();
+      return;
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      pickSuggest(suggest.index);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSuggest();
+      return;
+    }
+  }
+  if (e.key === "Escape") {
+    el.addInput.value = "";
+    state.draft = { priority: null, due: null };
+    renderDraft();
+    el.addInput.blur();
+  }
+  // Setelah karakter masuk, posisi gulir input bisa berubah.
+  requestAnimationFrame(() => (el.addMirror.scrollLeft = el.addInput.scrollLeft));
+});
 
 el.addPriority.addEventListener("click", () =>
   openPopover(
@@ -752,24 +1106,24 @@ el.addDue.addEventListener("click", () =>
 function shownHere(due, list) {
   const today = isoToday();
   if (state.tab === "today") return !!due && due <= today;
-  if (state.tab === "upcoming") return !!due && due > today && due <= isoPlus(state.view.upcoming_days);
+  if (state.tab === "upcoming") return !!due && due > today && due <= isoPlus(state.view.upcoming_days) && (!state.dayFilter || state.dayFilter === due);
   return !isListCollapsed(list);
 }
 
-// Task baru dari kotak atas selalu masuk Tasks.md: list default (atau ~list),
+// Task baru dari quick-add selalu masuk Tasks.md: list default (atau ~list),
 // dengan deadline hari ini kalau dari tab Today (kecuali token/tombol bilang lain).
 el.addForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = el.addInput.value.trim();
   if (!text || !state.view) return;
+  closeSuggest();
   const typed = quickTokens(text);
   const args = { text, list: state.view.default_list };
   if (state.draft.priority) args.priority = state.draft.priority;
   // Deadline dari token dibaca parser di tasks.rs; argumen `due` hanya untuk tombol / default Today.
   if (state.draft.due) args.due = state.draft.due;
   else if (!typed.due && state.tab === "today") args.due = isoToday();
-  const names = state.view.lists.map((l) => l.name);
-  const list = (typed.list && resolveList(names, typed.list)) || state.view.default_list;
+  const list = (typed.list && resolveList(listNames(), typed.list)) || state.view.default_list;
   const due = args.due || typed.due;
   const result = await mutate("add_task", args);
   if (!result) return; // gagal: biarkan teksnya supaya bisa diperbaiki
@@ -783,40 +1137,60 @@ el.addForm.addEventListener("submit", async (e) => {
   }
 });
 
-el.addInput.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    el.addInput.value = "";
-    state.draft = { priority: null, due: null };
-    renderDraft();
-    el.addInput.blur();
-  }
-});
-
 /* ---------- Notes (selalu daily note hari ini) ---------- */
+
+const clock = () => {
+  const d = new Date();
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+function renderNotesStatus() {
+  el.notesStatus.textContent = "today" + (state.notesNote ? ` · ${state.notesNote}` : "");
+}
 
 async function saveNotes() {
   clearTimeout(state.saveTimer);
   state.saveTimer = null;
   if (!state.notesDirty) return;
   const text = el.notes.value;
-  el.notesStatus.textContent = "Saving…";
+  state.notesNote = "saving…";
+  renderNotesStatus();
   try {
     const view = await invoke("save_notes", { notes: text });
     if (el.notes.value === text) {
       state.notesDirty = false;
-      el.notesStatus.textContent = "Saved";
+      state.notesNote = `saved ${clock()}`;
+      renderNotesStatus();
     }
     applyView(view);
   } catch (err) {
-    el.notesStatus.textContent = "Not saved";
+    state.notesNote = "not saved";
+    renderNotesStatus();
     showToast(String(err));
   }
 }
 
+/** Lipat/buka Notes; statusnya sama untuk semua tab dan diingat. */
+function applyNotesCollapsed() {
+  const collapsed = readPref("notesCollapsed", false);
+  el.notesSection.classList.toggle("collapsed", collapsed);
+  el.notesToggle.setAttribute("aria-expanded", String(!collapsed));
+}
+el.notesToggle.addEventListener("click", async () => {
+  const collapse = !readPref("notesCollapsed", false);
+  if (collapse) await saveNotes();
+  writePref("notesCollapsed", collapse);
+  applyNotesCollapsed();
+  if (!collapse) el.notes.focus();
+});
+
 function selectTab(tab) {
   if (tab === state.tab) return;
   closePopover();
+  closeSuggest();
   state.tab = tab;
+  state.dayFilter = null;
+  el.panel.dataset.tab = tab;
   el.tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   el.tasks.scrollTop = 0;
   renderDraft();
@@ -850,16 +1224,17 @@ function showToast(message, { action, run, ms = 3500, info = false } = {}) {
   toastTimer = setTimeout(hide, ms);
 }
 
-/* ---------- Config tampilan (tema, zoom, always on top) ---------- */
+/* ---------- Config tampilan (tema, zoom, opacity, always on top) ---------- */
 
-let display = null; // config terakhir: theme, appearance, zoom, always_on_top
+let display = null; // config terakhir: theme, appearance, zoom, opacity, always_on_top
 
 /** Terapkan setting tampilan dari config ke widget. */
 function applyDisplay(cfg) {
   display = cfg;
   applyTheme(cfg.theme, cfg.appearance);
   document.documentElement.style.zoom = String((cfg.zoom || 100) / 100);
-  $("btn-pin").setAttribute("aria-pressed", String(cfg.always_on_top));
+  // Hanya latar panel dan permukaan yang ikut transparan (lihat theme.css).
+  document.documentElement.style.setProperty("--opacity", `${cfg.opacity ?? 95}%`);
   if (appWindow) appWindow.setAlwaysOnTop(cfg.always_on_top).catch(() => {});
 }
 
@@ -952,26 +1327,21 @@ document.addEventListener("keydown", (e) => {
 
 /* ---------- Window ---------- */
 
-$("btn-pin").addEventListener("click", () => patchConfig({ always_on_top: $("btn-pin").getAttribute("aria-pressed") !== "true" }));
 $("btn-close").addEventListener("click", async () => {
   await saveNotes();
   if (appWindow) appWindow.close();
 });
-// Tombol hijau: Tasks.md di tab All, daily note hari ini di tab lain.
+// Tombol buka: Tasks.md di tab All, daily note hari ini di tab lain.
 el.open.addEventListener("click", () =>
   invoke("open_in_obsidian", { offset: 0, source: state.tab === "all" ? "tasks" : undefined }).catch((err) => showToast(String(err)))
 );
-
-el.showDone.addEventListener("click", () => {
-  writePref("showCompleted", !readPref("showCompleted", false));
-  if (state.view) renderTasks(state.view);
-});
 
 el.tabs.forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
 
 el.notes.addEventListener("input", () => {
   state.notesDirty = true;
-  el.notesStatus.textContent = "";
+  state.notesNote = "";
+  renderNotesStatus();
   clearTimeout(state.saveTimer);
   state.saveTimer = setTimeout(saveNotes, SAVE_DELAY_MS);
 });
@@ -979,8 +1349,11 @@ el.notes.addEventListener("blur", saveNotes);
 
 /* ---------- Start ---------- */
 
+el.panel.dataset.tab = state.tab;
+applyNotesCollapsed();
+renderNotesStatus();
 renderDraft();
-// Tampilan dulu (tema, zoom, pin), baru data.
+// Tampilan dulu (tema, zoom, opacity, always on top), baru data.
 invoke("get_config")
   .then(async (cfg) => {
     // Pindahkan pilihan pin lama (localStorage) ke config, sekali saja.
@@ -1034,7 +1407,11 @@ function mockInvoke() {
     {
       name: "Inbox",
       heading: true,
-      tasks: [make(0, "Cari referensi skripsi"), make(0, "Balas email dosen", { priority: "medium", due: isoPlus(1) })],
+      tasks: [
+        make(0, "Cari referensi skripsi"),
+        make(0, "Balas email dosen", { priority: "medium", due: isoPlus(1) }),
+        make(0, "Daftar lomba desain", { cancelled: true }),
+      ],
     },
     {
       name: "Kuliah",
@@ -1046,6 +1423,7 @@ function mockInvoke() {
         make(0, "Belajar untuk kuis basis data", { due: isoPlus(5) }),
         make(0, "Revisi makalah", { priority: "high", due: isoPlus(-1) }),
         make(0, "Baca [[Paper ICN|paper ICN]] bab 2", { due: isoToday() }),
+        make(0, "Kumpulkan tugas 3", { priority: "medium", done: true, done_date: isoPlus(-2) }),
       ],
     },
     {
@@ -1071,6 +1449,7 @@ function mockInvoke() {
     appearance: "system",
     zoom: 100,
     always_on_top: true,
+    opacity: 95,
   };
 
   /** Nomor baris: daily note mulai baris 3; Tasks.md tiap heading satu baris. */

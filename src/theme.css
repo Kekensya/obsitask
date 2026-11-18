@@ -1,56 +1,76 @@
 /*
- * Token warna bersama untuk widget dan window Settings.
+ * Token warna + font bersama untuk widget dan window Settings.
  * Nilai di :root = tema Default (dark), dipakai sebelum themes.js berjalan.
  * themes.js menimpa token dasar lewat :root[data-theme][data-mode]; token
  * turunan di bawah dihitung ulang otomatis dari token dasar.
  */
+
+/* Space Grotesk (SIL OFL 1.1, lihat fonts/SpaceGrotesk-OFL.txt), dibundel.
+   Inter dan Hack Nerd Font dipanggil lewat nama dari font Windows. */
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("fonts/SpaceGrotesk.ttf") format("truetype");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
 :root {
   /* Token dasar (lihat themes.js) */
-  --bg: rgb(40, 38, 37);
-  --card: rgba(255, 255, 255, 0.065);
-  --text: #f3f0ea;
-  --muted: #a9a39b;
-  --border: rgba(255, 255, 255, 0.08);
-  --secondary: rgba(255, 255, 255, 0.065);
-  --hover: rgba(255, 255, 255, 0.05);
-  --primary: #2f9461;
-  --on-primary: #ffffff;
-  --danger: #ff5f52;
-  --p-high: #ff6b5e;
-  --p-medium: #f0b445;
-  --p-low: #62a8f2;
-  --tag: #86c7a3;
-  --selection: rgba(47, 148, 97, 0.35);
+  --bg: #1e1e1e;
+  --card: #242424;
+  --text: #dadada;
+  --muted: #a3a3a3;
+  --border: rgba(218, 218, 218, 0.08);
+  --secondary: #262626;
+  --hover: rgba(218, 218, 218, 0.035);
+  --primary: #8a6cef;
+  --on-primary: #121212;
+  --danger: #ff8a5c;
+  --p-high: #ff8a5c;
+  --p-medium: #f2c14e;
+  --p-low: #5aa9ff;
+  --tag: #ab94f7;
+  --selection: rgba(138, 108, 239, 0.32);
 
   /* Token opsional: kalau tema tidak mengisinya, diturunkan dari token dasar */
   --faint: color-mix(in srgb, var(--muted) 85%, transparent);
   --raised: var(--card);
   --primary-text: var(--primary);
+  --primary-soft: color-mix(in srgb, var(--primary) 26%, transparent);
   --ring: color-mix(in srgb, var(--text) 78%, transparent);
+  --sidebar: var(--card);
+
+  /* Opacity latar widget (diatur di Settings > General; diset dari main.js).
+     Hanya latar panel dan permukaan yang ikut; teks dan ikon tetap penuh. */
+  --opacity: 100%;
 
   /* Turunan */
-  --panel: color-mix(in srgb, var(--bg) 93%, transparent);
-  --well: var(--secondary);
+  --panel: color-mix(in srgb, var(--bg) var(--opacity), transparent);
+  --well: color-mix(in srgb, var(--secondary) var(--opacity), transparent);
   --hover-strong: color-mix(in srgb, var(--text) 12%, transparent);
   --chip: color-mix(in srgb, var(--text) 8%, transparent);
-  --primary-soft: color-mix(in srgb, var(--primary) 26%, transparent);
   --primary-line: color-mix(in srgb, var(--primary) 65%, transparent);
   --danger-soft: color-mix(in srgb, var(--danger) 13%, transparent);
-  --danger-count: color-mix(in srgb, var(--danger) 30%, transparent);
   --danger-bg: color-mix(in srgb, var(--danger) 62%, #000);
   --on-danger: #ffffff;
   --scroll: color-mix(in srgb, var(--text) 16%, transparent);
   --scroll-hover: color-mix(in srgb, var(--text) 28%, transparent);
   --shadow: rgba(0, 0, 0, 0.45);
+  /* Warna token quick-add: @tanggal biru, !prioritas oranye, ~list ungu. */
+  --tok-date: var(--p-low);
+  --tok-prio: var(--p-high);
+  --tok-list: var(--primary-text);
 
-  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Font */
+  --display: "Space Grotesk", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "Hack Nerd Font", "Hack Nerd Font Mono", Hack, Consolas, monospace;
 
   color-scheme: dark;
 }
 
 :root[data-mode="light"] {
-  --shadow: rgba(40, 32, 24, 0.16);
+  --shadow: rgba(20, 20, 30, 0.14);
   color-scheme: light;
 }
 

@@ -2,7 +2,7 @@
 
 /*
  * Window Settings. Setiap perubahan langsung disimpan ke config.json lewat
- * save_config; backend lalu mengirim event "config-changed" ke semua window,
+ * update_config; backend lalu mengirim event "config-changed" ke semua window,
  * jadi widget ikut berubah saat itu juga. Tidak ada tombol Save.
  */
 
@@ -71,20 +71,28 @@ navButtons.forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.
 
 /* ---------- General ---------- */
 
-const modeCards = [...document.querySelectorAll(".mode-card")];
+// Appearance: segmented control di kanan judul halaman Themes.
+const modeButtons = [...document.querySelectorAll(".seg [data-appearance]")];
 function renderAppearance() {
-  modeCards.forEach((c) => c.setAttribute("aria-checked", String(c.dataset.appearance === cfg.appearance)));
+  modeButtons.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.appearance === cfg.appearance)));
 }
-modeCards.forEach((c) => c.addEventListener("click", () => save({ appearance: c.dataset.appearance })));
+modeButtons.forEach((b) => b.addEventListener("click", () => save({ appearance: b.dataset.appearance })));
 onSystemModeChange(() => cfg && applyLook());
 
-const zoom = $("s-zoom");
-let zoomTimer;
-zoom.addEventListener("input", () => {
-  $("s-zoom-value").textContent = `${zoom.value}%`;
-  clearTimeout(zoomTimer);
-  zoomTimer = setTimeout(() => save({ zoom: Number(zoom.value) }), 120);
-});
+/** Slider yang menyimpan sambil digeser (jeda `ms` supaya tidak menulis tiap piksel). */
+function liveSlider(id, key, ms) {
+  const input = $(id);
+  let timer;
+  input.addEventListener("input", () => {
+    $(`${id}-value`).textContent = `${input.value}%`;
+    clearTimeout(timer);
+    timer = setTimeout(() => save({ [key]: Number(input.value) }), ms);
+  });
+  return input;
+}
+const zoom = liveSlider("s-zoom", "zoom", 120);
+// Opacity: jeda sangat pendek supaya widget ikut berubah saat slider digeser.
+const opacity = liveSlider("s-opacity", "opacity", 30);
 
 $("s-top").addEventListener("change", (e) => save({ always_on_top: e.target.checked }));
 $("s-hide").addEventListener("change", (e) => save({ hide_completed: e.target.checked }));
@@ -193,24 +201,26 @@ async function runChecks() {
 
 const themeGrid = $("theme-grid");
 
+/** Pratinjau mini: latar, judul dengan garis aksen, tiga task dengan kotak prioritas. */
 function previewOf(theme, mode) {
   const p = document.createElement("div");
   p.className = "preview";
   p.setAttribute("style", themeDeclarations(theme.variants[mode]));
   p.innerHTML = `
-    <div class="pv-top"><span class="pv-tab on"></span><span class="pv-tab"></span><span class="pv-tab"></span><span class="pv-btn"></span></div>
-    <div class="pv-card">
-      <div class="pv-row"><span class="pv-box high"></span><span class="pv-line" style="width:58%"></span></div>
-      <div class="pv-row"><span class="pv-box medium"></span><span class="pv-line" style="width:40%"></span><span class="pv-tag"></span></div>
-      <div class="pv-row"><span class="pv-box low"></span><span class="pv-line danger" style="width:30%"></span></div>
-      <div class="pv-row"><span class="pv-box done"></span><span class="pv-line muted" style="width:46%"></span></div>
-    </div>`;
+    <div class="pv-head"><span class="pv-title"></span><span class="pv-accent"></span></div>
+    <div class="pv-row"><span class="pv-box high"></span><span class="pv-line" style="width:56%"></span><span class="pv-meta"></span></div>
+    <div class="pv-row"><span class="pv-box medium"></span><span class="pv-line" style="width:40%"></span></div>
+    <div class="pv-row"><span class="pv-box low"></span><span class="pv-line" style="width:48%"></span><span class="pv-meta"></span></div>`;
   return p;
 }
 
+/** Label varian kecil: "dark · light" / "dark" / "light". */
+const variantLabel = (theme) => ["dark", "light"].filter((m) => theme.variants[m]).join(" · ");
+
+const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
 function renderThemes() {
   const wanted = wantedMode(cfg.appearance);
-  $("themes-lead").textContent = `Showing the ${wanted} variants (from Appearance). Themes marked "Dark only" or "Light only" always use that variant.`;
   const cards = OBSI_THEMES.map((theme) => {
     const card = document.createElement("button");
     card.type = "button";
@@ -219,19 +229,23 @@ function renderThemes() {
     card.setAttribute("aria-checked", String(theme.id === cfg.theme));
     card.dataset.theme = theme.id;
     const only = themeOnly(theme);
+    if (only) card.title = `${only}: always uses this variant`;
     const meta = document.createElement("div");
     meta.className = "theme-meta";
     const name = document.createElement("span");
     name.className = "theme-name";
     name.textContent = theme.name;
-    meta.append(name);
-    if (only) {
-      const tag = document.createElement("span");
-      tag.className = "theme-only";
-      tag.textContent = only;
-      meta.append(tag);
-    }
+    const variants = document.createElement("span");
+    variants.className = "theme-variants";
+    variants.textContent = variantLabel(theme);
+    meta.append(name, variants);
     card.append(previewOf(theme, themeMode(theme, wanted)), meta);
+    if (theme.id === cfg.theme) {
+      const check = document.createElement("span");
+      check.className = "theme-check";
+      check.innerHTML = CHECK_SVG;
+      card.append(check);
+    }
     card.addEventListener("click", () => save({ theme: theme.id }));
     return card;
   });
@@ -247,6 +261,11 @@ $("s-open-config").addEventListener("click", () => invoke("open_config_dir").cat
 function fill() {
   zoom.value = cfg.zoom;
   $("s-zoom-value").textContent = `${cfg.zoom}%`;
+  // Jangan lompatkan slider yang sedang digeser.
+  if (document.activeElement !== opacity) {
+    opacity.value = cfg.opacity;
+    $("s-opacity-value").textContent = `${cfg.opacity}%`;
+  }
   $("s-top").checked = cfg.always_on_top;
   $("s-hide").checked = cfg.hide_completed;
   if (document.activeElement !== vaultInput) vaultInput.value = cfg.vault_path;
@@ -266,6 +285,7 @@ function fill() {
   selectTab(document.querySelector(`[data-panel="${tab}"]`) ? tab : "general");
   const info = await invoke("app_info");
   $("s-version").textContent = `Version ${info.version}`;
+  $("s-nav-version").textContent = `v${info.version}`;
   $("s-config-path").textContent = info.config_path;
   // Perubahan dari widget (mis. tombol pin) ikut tampil di sini.
   if (tauri) {
@@ -295,6 +315,7 @@ function settingsMock() {
     appearance: "system",
     zoom: 100,
     always_on_top: true,
+    opacity: 95,
   };
   return async (cmd, args = {}) => {
     switch (cmd) {

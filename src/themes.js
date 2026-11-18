@@ -2,24 +2,25 @@
 /*
  * Tema warna ObsiTask.
  *
- * "Default" adalah tampilan bawaan ObsiTask. Tema lain memakai nilai warna dari
+ * "Default" adalah tampilan bawaan ObsiTask (gaya Obsidian, hitam + ungu). Tema lain memakai nilai warna dari
  * Terax (https://github.com/crynta/terax-ai, src/modules/theme/themes, lisensi
  * Apache-2.0) — hanya nilai warnanya yang diambil, dipetakan ke token ObsiTask:
  *
- *   background  -> panel (sedikit transparan)   card      -> kartu
+ *   background  -> panel (opacity diatur user)    card      -> kartu (Settings)
  *   text        <- cardForeground               muted     <- mutedForeground
- *   border      -> garis kartu / panel          secondary -> kotak input, tombol bulat, segmented
- *   accent      -> sorotan baris task           primary   -> tombol hijau, checkbox, tab, fokus
+ *   border      -> garis kartu / panel          secondary -> permukaan: quick-add, Notes
+ *   accent      -> hover, latar list terbuka          primary   -> aksen: checkbox, tab, fokus
  *   onPrimary   <- primaryForeground            danger    <- destructive (overdue, toast error)
  *   high/medium/low <- terminal ansi[1]/[3]/[4] tag       <- terminal ansi[6]
  *   selection   <- terminal selection
  *
- * Token opsional (hanya Default): faint, raised, primaryText, ring. Kalau tidak
- * ada, theme.css menurunkannya dari token lain.
+ * Token opsional (hanya Default): faint, raised, primaryText, primarySoft, ring,
+ * sidebar. Kalau tidak ada, theme.css menurunkannya dari token lain.
  *
- * Kontras: token yang di bawah WCAG (teks 4.5:1, lingkaran prioritas dan ikon
- * 3:1, diukur di atas kartu) digeser sedikit ke arah warna teks tema itu sampai
- * lolos; daftar token yang diubah ada di `adjusted`. Default tidak diubah.
+ * Kontras: token yang di bawah WCAG (teks 4.5:1, kotak prioritas dan ikon 3:1,
+ * diukur di atas panel, permukaan input/Notes, dan kartu — yang terburuk)
+ * digeser sedikit ke arah warna teks tema itu sampai lolos; daftar token yang
+ * diubah ada di `adjusted`. Default tidak diubah (nilainya sudah lolos).
  */
 
 const OBSI_THEMES = [
@@ -28,46 +29,50 @@ const OBSI_THEMES = [
     name: "Default",
     variants: {
       dark: {
-        background: "rgb(40, 38, 37)",
-        card: "rgba(255, 255, 255, 0.065)",
-        text: "#f3f0ea",
-        muted: "#a9a39b",
-        faint: "#7d7770",
-        border: "rgba(255, 255, 255, 0.08)",
-        secondary: "rgba(255, 255, 255, 0.065)",
-        accent: "rgba(255, 255, 255, 0.05)",
-        primary: "#2f9461",
-        onPrimary: "#ffffff",
-        primaryText: "#7fd6a6",
-        danger: "#ff5f52",
-        high: "#ff6b5e",
-        medium: "#f0b445",
-        low: "#62a8f2",
-        tag: "#86c7a3",
-        selection: "rgba(47, 148, 97, 0.35)",
-        raised: "#2f2c2b",
-        ring: "#d9d4cc"
+        background: "#1e1e1e",
+        card: "#242424",
+        text: "#dadada",
+        muted: "#a3a3a3",
+        faint: "#8c8c8c",
+        border: "rgba(218, 218, 218, 0.08)",
+        secondary: "#262626",
+        accent: "rgba(218, 218, 218, 0.035)",
+        primary: "#8a6cef",
+        onPrimary: "#121212",
+        primaryText: "#ab94f7",
+        primarySoft: "rgba(138, 108, 239, 0.16)",
+        danger: "#ff8a5c",
+        high: "#ff8a5c",
+        medium: "#f2c14e",
+        low: "#5aa9ff",
+        ring: "#6e6e6e",
+        tag: "#ab94f7",
+        selection: "rgba(138, 108, 239, 0.32)",
+        raised: "#2a2a2a",
+        sidebar: "#181818"
       },
       light: {
-        background: "#f3f0ea",
-        card: "rgba(255, 255, 255, 0.72)",
-        text: "#2a2725",
-        muted: "#6c665f",
-        faint: "#8a837b",
-        border: "rgba(42, 39, 37, 0.12)",
-        secondary: "rgba(42, 39, 37, 0.06)",
-        accent: "rgba(42, 39, 37, 0.05)",
-        primary: "#23794c",
+        background: "#ffffff",
+        card: "#f6f6f6",
+        text: "#222222",
+        muted: "#5c5c5c",
+        faint: "#6b6b6b",
+        border: "rgba(34, 34, 34, 0.10)",
+        secondary: "#f6f6f6",
+        accent: "rgba(34, 34, 34, 0.035)",
+        primary: "#7a5af0",
         onPrimary: "#ffffff",
-        primaryText: "#1d6e44",
-        danger: "#c8433a",
-        high: "#cc3f35",
-        medium: "#a8680f",
-        low: "#2b68b3",
-        tag: "#20734b",
-        selection: "rgba(47, 148, 97, 0.22)",
-        raised: "#fbfaf7",
-        ring: "#7a736b"
+        primaryText: "#7a5af0",
+        primarySoft: "rgba(122, 90, 240, 0.12)",
+        danger: "#c2410c",
+        high: "#c2410c",
+        medium: "#a16207",
+        low: "#1d4ed8",
+        ring: "#8a8a8a",
+        tag: "#7a5af0",
+        selection: "rgba(122, 90, 240, 0.20)",
+        raised: "#ffffff",
+        sidebar: "#f6f6f6"
       }
     }
   },
@@ -79,19 +84,20 @@ const OBSI_THEMES = [
         background: "#1c1c1e",
         card: "#2c2c2e",
         text: "#f5f5f7",
-        muted: "#98989d",
+        muted: "#a3a3a8",
         border: "rgba(255,255,255,0.09)",
         secondary: "#3a3a3c",
         accent: "#3a3a3c",
         primary: "#0a84ff",
         onPrimary: "#ffffff",
-        danger: "#fe5a51",
+        danger: "#fc7d76",
         high: "#ff453a",
         medium: "#ffd60a",
         low: "#0a84ff",
         tag: "#64d2ff",
         selection: "rgba(10,132,255,0.28)",
         adjusted: [
+          "muted",
           "danger"
         ]
       },
@@ -99,19 +105,20 @@ const OBSI_THEMES = [
         background: "#ffffff",
         card: "#f5f5f7",
         text: "#1d1d1f",
-        muted: "#6e6e73",
+        muted: "#6c6c71",
         border: "rgba(0,0,0,0.09)",
         secondary: "#f0f0f2",
         accent: "#ebebed",
         primary: "#007aff",
         onPrimary: "#ffffff",
-        danger: "#cd342c",
+        danger: "#c9342c",
         high: "#d70015",
         medium: "#b25000",
         low: "#0040dd",
         tag: "#0071a4",
         selection: "rgba(0,122,255,0.18)",
         adjusted: [
+          "muted",
           "danger"
         ]
       }
@@ -131,7 +138,7 @@ const OBSI_THEMES = [
         accent: "#2f2d2a",
         primary: "#d97757",
         onPrimary: "#1f1e1d",
-        danger: "#e56650",
+        danger: "#e66953",
         high: "#e5634d",
         medium: "#e8b87a",
         low: "#8fb0d9",
@@ -145,7 +152,7 @@ const OBSI_THEMES = [
         background: "#faf9f5",
         card: "#ffffff",
         text: "#3d3a2f",
-        muted: "#73705f",
+        muted: "#6f6c5b",
         border: "rgba(61,58,47,0.12)",
         secondary: "#f0eee6",
         accent: "#f0ede4",
@@ -155,8 +162,12 @@ const OBSI_THEMES = [
         high: "#c0392b",
         medium: "#b07a2a",
         low: "#3a6ea5",
-        tag: "#2a8085",
-        selection: "rgba(193,95,60,0.16)"
+        tag: "#2d7679",
+        selection: "rgba(193,95,60,0.16)",
+        adjusted: [
+          "muted",
+          "tag"
+        ]
       }
     }
   },
@@ -174,14 +185,16 @@ const OBSI_THEMES = [
         accent: "#363646",
         primary: "#7e9cd8",
         onPrimary: "#1f1f28",
-        danger: "#c9615d",
-        high: "#c34043",
+        danger: "#cd7c73",
+        high: "#c54c4d",
         medium: "#c0a36e",
         low: "#7e9cd8",
-        tag: "#6a9589",
+        tag: "#739a8d",
         selection: "rgba(45,79,103,0.45)",
         adjusted: [
-          "danger"
+          "danger",
+          "tag",
+          "high"
         ]
       },
       light: {
@@ -222,12 +235,15 @@ const OBSI_THEMES = [
         accent: "#393836",
         primary: "#8ba4b0",
         onPrimary: "#181616",
-        danger: "#c4746e",
+        danger: "#c47b75",
         high: "#c4746e",
         medium: "#c4b28a",
         low: "#8ba4b0",
         tag: "#8ea4a2",
-        selection: "rgba(45,79,103,0.45)"
+        selection: "rgba(45,79,103,0.45)",
+        adjusted: [
+          "danger"
+        ]
       }
     }
   },
@@ -279,19 +295,21 @@ const OBSI_THEMES = [
         background: "#eff1f5",
         card: "#ffffff",
         text: "#4c4f69",
-        muted: "#6c6f85",
+        muted: "#64677e",
         border: "rgba(76,79,105,0.12)",
         secondary: "#e6e9ef",
         accent: "#e6e9ef",
         primary: "#8839ef",
         onPrimary: "#eff1f5",
-        danger: "#d20f39",
+        danger: "#cf103a",
         high: "#d20f39",
-        medium: "#ca8528",
+        medium: "#b07a35",
         low: "#1e66f5",
-        tag: "#24828d",
+        tag: "#327181",
         selection: "rgba(136,57,239,0.20)",
         adjusted: [
+          "muted",
+          "danger",
           "tag",
           "medium"
         ]
@@ -323,23 +341,24 @@ const OBSI_THEMES = [
         background: "#faf4ed",
         card: "#fffaf3",
         text: "#575279",
-        muted: "#74708f",
+        muted: "#6b6688",
         border: "rgba(87,82,121,0.12)",
         secondary: "#f2e9e1",
         accent: "#f2e9e1",
         primary: "#907aa9",
         onPrimary: "#faf4ed",
-        danger: "#a1607a",
+        danger: "#895b7a",
         high: "#b4637a",
-        medium: "#bb854a",
-        low: "#56949f",
-        tag: "#92687b",
+        medium: "#a97c52",
+        low: "#568f9c",
+        tag: "#7d607b",
         selection: "rgba(144,122,169,0.22)",
         adjusted: [
           "muted",
           "danger",
           "tag",
-          "medium"
+          "medium",
+          "low"
         ]
       }
     }
@@ -352,34 +371,38 @@ const OBSI_THEMES = [
         background: "#2d353b",
         card: "#272e33",
         text: "#d3c6aa",
-        muted: "#9da9a0",
+        muted: "#a0aba1",
         border: "rgba(211,198,170,0.08)",
         secondary: "#343f44",
         accent: "#3d484d",
         primary: "#a7c080",
         onPrimary: "#2d353b",
-        danger: "#e67e80",
+        danger: "#e0948d",
         high: "#e67e80",
         medium: "#dbbc7f",
         low: "#7fbbb3",
         tag: "#83c092",
-        selection: "rgba(76,55,67,0.6)"
+        selection: "rgba(76,55,67,0.6)",
+        adjusted: [
+          "muted",
+          "danger"
+        ]
       },
       light: {
         background: "#fdf6e3",
         card: "#f4f0d9",
         text: "#5c6a72",
-        muted: "#616f74",
+        muted: "#5e6c73",
         border: "rgba(92,106,114,0.12)",
         secondary: "#efebd4",
         accent: "#e6e2cc",
-        primary: "#7f9221",
+        primary: "#7d8f25",
         onPrimary: "#fdf6e3",
-        danger: "#85656a",
-        high: "#ec5755",
-        medium: "#a38734",
-        low: "#3b92c2",
-        tag: "#577173",
+        danger: "#72676e",
+        high: "#e25856",
+        medium: "#9b843b",
+        low: "#3f8eb9",
+        tag: "#5a6c72",
         selection: "rgba(230,226,204,0.8)",
         adjusted: [
           "muted",
@@ -401,21 +424,22 @@ const OBSI_THEMES = [
         background: "#2e3440",
         card: "#3b4252",
         text: "#eceff4",
-        muted: "#a4afc4",
+        muted: "#b3bcce",
         border: "rgba(255,255,255,0.08)",
         secondary: "#434c5e",
         accent: "#434c5e",
         primary: "#88c0d0",
         onPrimary: "#2e3440",
-        danger: "#d4a2a9",
-        high: "#c67880",
+        danger: "#d9b3ba",
+        high: "#cb868e",
         medium: "#ebcb8b",
         low: "#81a1c1",
-        tag: "#88c0d0",
+        tag: "#90c4d3",
         selection: "rgba(136,192,208,0.25)",
         adjusted: [
           "muted",
           "danger",
+          "tag",
           "high"
         ]
       },
@@ -429,11 +453,11 @@ const OBSI_THEMES = [
         accent: "#e5e9f0",
         primary: "#5e81ac",
         onPrimary: "#eceff4",
-        danger: "#b15d66",
+        danger: "#99555f",
         high: "#bf616a",
-        medium: "#a3926f",
-        low: "#7996b4",
-        tag: "#5b7a88",
+        medium: "#908367",
+        low: "#6d87a2",
+        tag: "#526c7a",
         selection: "rgba(94,129,172,0.25)",
         adjusted: [
           "danger",
@@ -452,42 +476,47 @@ const OBSI_THEMES = [
         background: "#282828",
         card: "#32302f",
         text: "#ebdbb2",
-        muted: "#a89984",
+        muted: "#afa089",
         border: "rgba(235,219,178,0.10)",
         secondary: "#3c3836",
         accent: "#3c3836",
         primary: "#fabd2f",
         onPrimary: "#282828",
-        danger: "#f76c52",
-        high: "#d34c3e",
+        danger: "#f58064",
+        high: "#d65f4d",
         medium: "#d79921",
-        low: "#458588",
-        tag: "#75a371",
+        low: "#528c8b",
+        tag: "#87ac7b",
         selection: "rgba(250,189,47,0.25)",
         adjusted: [
+          "muted",
           "danger",
           "tag",
-          "high"
+          "high",
+          "low"
         ]
       },
       light: {
         background: "#fbf1c7",
         card: "#f9f5d7",
         text: "#3c3836",
-        muted: "#796d62",
+        muted: "#695f56",
         border: "rgba(60,56,54,0.12)",
         secondary: "#ebdbb2",
         accent: "#ebdbb2",
-        primary: "#b57614",
+        primary: "#a97017",
         onPrimary: "#fbf1c7",
         danger: "#9d0006",
         high: "#9d0006",
-        medium: "#b57614",
+        medium: "#a97017",
         low: "#076678",
-        tag: "#427b58",
+        tag: "#406a4f",
         selection: "rgba(181,118,20,0.22)",
         adjusted: [
-          "muted"
+          "muted",
+          "tag",
+          "medium",
+          "primary"
         ]
       }
     }
@@ -506,12 +535,15 @@ const OBSI_THEMES = [
         accent: "#44475a",
         primary: "#bd93f9",
         onPrimary: "#282a36",
-        danger: "#ff5555",
+        danger: "#fe7674",
         high: "#ff5555",
         medium: "#f1fa8c",
         low: "#bd93f9",
         tag: "#8be9fd",
-        selection: "rgba(68,71,90,0.7)"
+        selection: "rgba(68,71,90,0.7)",
+        adjusted: [
+          "danger"
+        ]
       }
     }
   },
@@ -593,7 +625,7 @@ const OBSI_THEMES = [
         background: "#f2f6f5",
         card: "#ffffff",
         text: "#2b3a39",
-        muted: "#5f6e6d",
+        muted: "#5d6c6b",
         border: "rgba(43,58,57,0.12)",
         secondary: "#e3ecea",
         accent: "#e3ecea",
@@ -603,8 +635,12 @@ const OBSI_THEMES = [
         high: "#c0392b",
         medium: "#a9802a",
         low: "#3a6ea5",
-        tag: "#2f7d76",
-        selection: "rgba(47,125,118,0.16)"
+        tag: "#2e746d",
+        selection: "rgba(47,125,118,0.16)",
+        adjusted: [
+          "muted",
+          "tag"
+        ]
       }
     }
   },
@@ -633,7 +669,7 @@ const OBSI_THEMES = [
         background: "#f4f6f0",
         card: "#ffffff",
         text: "#36422f",
-        muted: "#6b7563",
+        muted: "#616c5a",
         border: "rgba(54,66,47,0.12)",
         secondary: "#e6ecdd",
         accent: "#e6ecdd",
@@ -643,9 +679,10 @@ const OBSI_THEMES = [
         high: "#c0392b",
         medium: "#a97f2a",
         low: "#3a7a6e",
-        tag: "#2a827d",
+        tag: "#2d746b",
         selection: "rgba(90,122,63,0.16)",
         adjusted: [
+          "muted",
           "tag"
         ]
       }
@@ -665,12 +702,15 @@ const OBSI_THEMES = [
         accent: "#2a2a2a",
         primary: "#ffe0c2",
         onPrimary: "#081a1b",
-        danger: "#e54d2e",
+        danger: "#e87a64",
         high: "#e06c75",
         medium: "#ffd9a0",
         low: "#8fb0d9",
         tag: "#88c0c8",
-        selection: "rgba(255,224,194,0.20)"
+        selection: "rgba(255,224,194,0.20)",
+        adjusted: [
+          "danger"
+        ]
       },
       light: {
         background: "#f9f9f9",
@@ -682,11 +722,11 @@ const OBSI_THEMES = [
         accent: "#e8e8e8",
         primary: "#644a40",
         onPrimary: "#ffffff",
-        danger: "#c9472c",
+        danger: "#ae402a",
         high: "#c0392b",
         medium: "#a9762a",
         low: "#3a6ea5",
-        tag: "#297f83",
+        tag: "#286f72",
         selection: "rgba(100,74,64,0.16)",
         adjusted: [
           "danger",
@@ -717,6 +757,8 @@ const THEME_VARS = {
   selection: "--selection",
   raised: "--raised",
   ring: "--ring",
+  primarySoft: "--primary-soft",
+  sidebar: "--sidebar",
 };
 
 const findTheme = (id) => OBSI_THEMES.find((t) => t.id === id) || OBSI_THEMES[0];

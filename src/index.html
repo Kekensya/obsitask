@@ -10,48 +10,51 @@
 </head>
 <body>
   <div class="panel" id="panel">
-    <!-- Bar atas: area kosongnya dipakai untuk menggeser widget -->
+    <!-- Bar atas: seluruh bar (kecuali tombol) dipakai untuk menggeser widget -->
     <header class="topbar" data-tauri-drag-region>
-      <div class="bar-side" data-tauri-drag-region>
-        <button class="icon-btn" id="btn-close" title="Close" aria-label="Close">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-        <button class="icon-btn" id="btn-pin" title="Always on top" aria-label="Always on top" aria-pressed="true">
-          <svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5" /></svg>
-        </button>
-      </div>
-
-      <div class="segmented" role="tablist" aria-label="View">
-        <button role="tab" data-tab="today" aria-selected="true" title="Overdue, due today, and today's daily note">Today</button>
-        <button role="tab" data-tab="upcoming" aria-selected="false" title="Due in the coming days">Upcoming</button>
-        <button role="tab" data-tab="all" aria-selected="false" title="All lists in the tasks file">All</button>
-      </div>
-
-      <div class="bar-side end" data-tauri-drag-region>
+      <span class="brand" data-tauri-drag-region>obsitask<span class="brand-dot" data-tauri-drag-region>.</span></span>
+      <div class="bar-actions" data-tauri-drag-region>
         <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Settings">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a7.6 7.6 0 000-3l2-1.5-2-3.4-2.3.9a7.5 7.5 0 00-2.6-1.5L14 2.5h-4l-.5 2.5a7.5 7.5 0 00-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 000 3l-2 1.5 2 3.4 2.3-.9a7.5 7.5 0 002.6 1.5l.5 2.5h4l.5-2.5a7.5 7.5 0 002.6-1.5l2.3.9 2-3.4-2-1.5z" /></svg>
+        </button>
+        <button class="icon-btn" id="btn-close" title="Close" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
       </div>
     </header>
 
-    <h1 class="date" id="date" data-tauri-drag-region></h1>
+    <!-- Judul: tanggal / "Upcoming" / "All lists", keterangan di kanan -->
+    <div class="heading" data-tauri-drag-region>
+      <h1 class="title" id="title" data-tauri-drag-region></h1>
+      <span class="title-meta" id="title-meta" data-tauri-drag-region></span>
+      <button class="ghost-icon" id="btn-open" title="Open in Obsidian" aria-label="Open in Obsidian">
+        <svg viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 00-1 1v11a1 1 0 001 1h11a1 1 0 001-1v-5" /></svg>
+      </button>
+    </div>
+
+    <nav class="tabs" role="tablist" aria-label="View">
+      <button role="tab" data-tab="today" aria-selected="true" title="Overdue, due today, and today's daily note">Today<span class="badge" id="today-badge" hidden></span></button>
+      <button role="tab" data-tab="upcoming" aria-selected="false" title="Due in the coming days">Upcoming</button>
+      <button role="tab" data-tab="all" aria-selected="false" title="All lists in the tasks file">All</button>
+    </nav>
+
+    <!-- Strip 7 hari (hanya di Upcoming) -->
+    <div class="week" id="week" role="group" aria-label="Filter by day" hidden></div>
 
     <!-- Daftar task -->
-    <section class="card tasks-card">
-      <div class="card-head">
-        <svg class="card-icon" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1.2" /><circle cx="4.5" cy="12" r="1.2" /><circle cx="4.5" cy="18" r="1.2" /></svg>
-        <h2>Tasks</h2>
-        <button class="text-btn" id="btn-completed" type="button" aria-pressed="false" hidden>Show completed</button>
-        <span class="count" id="count"></span>
-        <button class="accent-btn" id="btn-open" title="Open in Obsidian" aria-label="Open in Obsidian">
-          <svg viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M11 6H6a1 1 0 00-1 1v11a1 1 0 001 1h11a1 1 0 001-1v-5" /></svg>
-        </button>
-      </div>
-      <!-- Tambah task: Enter menyimpan; !high / !med / !low dan @today / @tomorrow / @YYYY-MM-DD dikenali -->
+    <ul class="task-list" id="tasks"></ul>
+    <p class="empty" id="empty" hidden></p>
+
+    <!-- Quick-add: Enter menyimpan; ~list !prio @date dikenali -->
+    <div class="add-wrap">
+      <div class="suggest" id="suggest" role="listbox" aria-label="Lists" hidden></div>
       <form class="add-bar" id="add-form" autocomplete="off">
-        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
-        <input id="add-input" type="text" placeholder="Add a task…" spellcheck="false" aria-label="Add a task"
-               title="Enter to add. Try: !high !med !low, @today @tomorrow @2026-12-31, ~list" />
+        <span class="add-prefix" aria-hidden="true">›</span>
+        <div class="add-field">
+          <div class="add-mirror" id="add-mirror" aria-hidden="true"></div>
+          <input id="add-input" type="text" placeholder="Add a task   ~list  !prio  @date" spellcheck="false" aria-label="Add a task"
+                 title="Enter to add. Try: ~list, !high !med !low, @today @tomorrow @2026-12-31" />
+        </div>
         <button type="button" class="mini-btn p-none" id="add-priority" title="Priority" aria-label="Priority" aria-haspopup="true">
           <svg viewBox="0 0 24 24"><path d="M5 21V4" /><path d="M5 4h12l-2.5 4 2.5 4H5" /></svg>
         </button>
@@ -59,19 +62,19 @@
           <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /></svg>
           <span id="add-due-label"></span>
         </button>
+        <span class="add-enter" aria-hidden="true">↵</span>
       </form>
-      <ul class="task-list" id="tasks"></ul>
-      <p class="empty" id="empty" hidden></p>
-    </section>
+      <div class="add-preview" id="add-preview" aria-live="polite" hidden></div>
+    </div>
 
-    <!-- Catatan kecil -->
-    <section class="card notes-card">
-      <div class="card-head">
-        <svg class="card-icon" viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3" /></svg>
-        <h2>Notes</h2>
-        <span class="status" id="notes-status"></span>
-      </div>
-      <textarea id="notes" spellcheck="false" placeholder="Jot something down…"></textarea>
+    <!-- Catatan di daily note hari ini -->
+    <section class="notes" id="notes-section">
+      <button type="button" class="notes-head" id="notes-toggle" aria-expanded="true" aria-controls="notes">
+        <span class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></span>
+        <span class="notes-label">notes</span>
+        <span class="status" id="notes-status">today</span>
+      </button>
+      <textarea id="notes" spellcheck="false" placeholder="Jot something down…" aria-label="Notes"></textarea>
     </section>
 
     <div class="toast" id="toast" role="status" hidden></div>
