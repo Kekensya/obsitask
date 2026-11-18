@@ -15,6 +15,10 @@ pub struct Config {
     pub notes_heading: String,
     /// Heading tempat task baru dari widget ditambahkan.
     pub tasks_heading: String,
+    /// File list permanen, relatif terhadap vault (default `Tasks.md`).
+    pub tasks_file: String,
+    /// List tujuan task baru di Tasks.md.
+    pub default_list: String,
     /// Sembunyikan task yang sudah dicentang.
     pub hide_completed: bool,
     /// Berapa hari ke belakang daily note dipindai untuk bagian "Overdue & due".
@@ -33,6 +37,8 @@ impl Default for Config {
             date_format: "YYYY-MM-DD".to_string(),
             notes_heading: "## Notes".to_string(),
             tasks_heading: "## Tasks".to_string(),
+            tasks_file: "Tasks.md".to_string(),
+            default_list: "Inbox".to_string(),
             hide_completed: false,
             scan_days: 30,
         }
@@ -70,6 +76,39 @@ impl Config {
             }
         }
         p
+    }
+
+    /// Path absolut Tasks.md. `.md` ditambahkan kalau tidak ditulis.
+    pub fn tasks_path(&self) -> PathBuf {
+        let rel = self.tasks_file.trim();
+        let rel = if rel.is_empty() { "Tasks.md" } else { rel };
+        let mut p = PathBuf::from(self.vault_path.trim());
+        for part in rel.split(['/', '\\']) {
+            if !part.is_empty() && part != "." && part != ".." {
+                p.push(part);
+            }
+        }
+        if !p.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")) {
+            let name = format!("{}.md", p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+            p.set_file_name(name);
+        }
+        p
+    }
+
+    /// Path file di vault relatif terhadap vault, pakai "/" (untuk URI obsidian://).
+    pub fn vault_rel(&self, full: &Path) -> String {
+        let rel = full
+            .strip_prefix(self.vault_path.trim())
+            .unwrap_or(full)
+            .to_string_lossy()
+            .replace('\\', "/");
+        rel.trim_start_matches('/').to_string()
+    }
+
+    /// List default yang pasti terisi (tanpa awalan `#`).
+    pub fn default_list(&self) -> String {
+        let name = self.default_list.trim().trim_start_matches('#').trim();
+        if name.is_empty() { "Inbox".to_string() } else { name.to_string() }
     }
 
     /// Path daily note relatif terhadap vault, pakai "/" (untuk URI obsidian://).
@@ -185,5 +224,22 @@ mod tests {
             PathBuf::from("/vault/Journal/Daily/2026/2026-11-17.md")
         );
         assert_eq!(cfg.daily_note_rel(d), "Journal/Daily/2026/2026-11-17.md");
+    }
+
+    #[test]
+    fn builds_tasks_file_path() {
+        let mut cfg = Config { vault_path: "/vault".into(), ..Default::default() };
+        assert_eq!(cfg.tasks_path(), PathBuf::from("/vault/Tasks.md"));
+        assert_eq!(cfg.vault_rel(&cfg.tasks_path()), "Tasks.md");
+        cfg.tasks_file = "Lists/Todo".into();
+        assert_eq!(cfg.tasks_path(), PathBuf::from("/vault/Lists/Todo.md"));
+        cfg.tasks_file = "../luar/x.MD".into();
+        assert_eq!(cfg.tasks_path(), PathBuf::from("/vault/luar/x.MD"));
+        cfg.tasks_file = "  ".into();
+        assert_eq!(cfg.tasks_path(), PathBuf::from("/vault/Tasks.md"));
+        cfg.default_list = " ## Kuliah ".into();
+        assert_eq!(cfg.default_list(), "Kuliah");
+        cfg.default_list = "".into();
+        assert_eq!(cfg.default_list(), "Inbox");
     }
 }

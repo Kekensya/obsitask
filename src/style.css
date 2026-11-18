@@ -109,7 +109,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   border: 1px solid var(--card-border);
 }
 .segmented button {
-  padding: 4px 11px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -156,6 +156,19 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   font: 700 16px/1 var(--serif);
 }
 .card-icon { width: 17px; height: 17px; color: var(--text); }
+
+/* Tombol teks kecil di kepala kartu ("Show completed"). */
+.text-btn {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.text-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.text-btn[aria-pressed="true"] { color: #7fd6a6; }
+.text-btn:not([hidden]) + .count { margin-left: 6px; }
 
 .count, .status {
   margin-left: auto;
@@ -357,6 +370,8 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   color: var(--faint);
 }
 .pop-row { display: flex; gap: 4px; }
+.pop-row.wrap { flex-wrap: wrap; }
+.pop-row.wrap .pop-chip { flex: 0 1 auto; max-width: 100%; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; }
 .pop-chip {
   flex: 1 1 auto;
   display: flex;
@@ -439,6 +454,46 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
   background: rgba(255, 95, 82, 0.28);
 }
 .task-list .group-empty { padding: 3px 8px 6px; font-size: 12px; color: var(--faint); }
+
+/* Judul list di tab All: lebih menonjol, jumlah task terbuka netral. */
+.task-list .group.list {
+  margin: 10px 0 2px;
+  font: 700 13px/1.2 var(--serif);
+  letter-spacing: 0.1px;
+  text-transform: none;
+  color: var(--text);
+}
+.task-list .group.list:first-child { margin-top: 0; }
+.task-list .group.list .group-count {
+  font: 600 10px/1.5 var(--sans);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Input "Add to <list>…" di akhir tiap list. */
+.list-add-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 2px 0 8px;
+  border-radius: 8px;
+}
+.list-add-row:focus-within { background: var(--well); }
+.list-add-row .plus { display: grid; width: 16px; place-items: center; color: var(--faint); }
+.list-add-row .plus svg { width: 12px; height: 12px; stroke-width: 2.2; }
+.list-add {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 4px;
+  font: 12px var(--sans);
+  color: var(--text);
+  background: none;
+  border: 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.list-add::placeholder { color: var(--faint); }
+.list-add:focus { outline: none; }
 
 .empty {
   margin: auto;

@@ -405,10 +405,14 @@ pub fn parse_tasks(content: &str) -> Vec<Task> {
         .enumerate()
         .filter(|(i, _)| !mask[*i])
         .filter_map(|(i, line)| parse_line(line).map(|p| (i, p)));
+    build_tasks(raw)
+}
 
-    // Ubah lebar indentasi jadi level bertingkat.
+/// Ubah baris checkbox mentah jadi `Task`, termasuk level indentasi bertingkat.
+fn build_tasks(raw: impl IntoIterator<Item = (usize, ParsedLine)>) -> Vec<Task> {
     let mut stack: Vec<usize> = Vec::new();
-    raw.map(|(line, p)| {
+    raw.into_iter()
+        .map(|(line, p)| {
         while stack.last().is_some_and(|&top| top >= p.indent) {
             stack.pop();
         }
@@ -426,8 +430,8 @@ pub fn parse_tasks(content: &str) -> Vec<Task> {
             title: meta.title,
             text: p.text,
         }
-    })
-    .collect()
+        })
+        .collect()
 }
 
 /// Task yang belum selesai (bukan `[x]`, bukan `[-]`) dengan deadline paling
@@ -449,11 +453,14 @@ pub struct Quick {
     pub title: String,
     pub priority: Option<Priority>,
     pub due: Option<String>,
+    /// Nama list yang diketik (`~kul`), belum dicocokkan dengan list yang ada.
+    pub list: Option<String>,
 }
 
-/// Baca token `!high` / `!med` / `!low` (juga `!medium`, `!none`) dan
-/// `@today` / `@tomorrow` / `@YYYY-MM-DD` dari input. Token dibuang dari judul.
-/// Kata lain yang diawali `!` atau `@` dibiarkan sebagai bagian judul.
+/// Baca token `!high` / `!med` / `!low` (juga `!medium`, `!none`),
+/// `@today` / `@tomorrow` / `@YYYY-MM-DD`, dan `~NamaList` dari input. Token
+/// dibuang dari judul. Kata lain yang diawali `!` atau `@`, dan `~` yang tidak
+/// diikuti huruf (mis. `~5`), dibiarkan sebagai bagian judul.
 pub fn parse_quick(input: &str, today: NaiveDate) -> Quick {
     let input = input.replace(['\r', '\n'], " ");
     let mut quick = Quick::default();
@@ -471,6 +478,12 @@ pub fn parse_quick(input: &str, today: NaiveDate) -> Quick {
             _ => None,
         }) {
             quick.due = Some(d.format("%Y-%m-%d").to_string());
+            found = true;
+        } else if let Some(name) = word
+            .strip_prefix('~')
+            .filter(|n| n.chars().next().is_some_and(char::is_alphabetic))
+        {
+            quick.list = Some(name.to_string());
             found = true;
         } else {
             kept.push(word);
@@ -669,8 +682,21 @@ fn block_end(lines: &[String], start: usize, indent: usize, limit: usize) -> usi
 }
 
 fn insert_under_heading(lines: &mut Vec<String>, heading: &str, block: Vec<String>) {
+    let section = section_range(lines, &code_mask(lines), heading);
+    insert_in_section(lines, section, heading, block);
+}
+
+/// Sisipkan `block` di akhir daftar task di dalam `section` (baris heading,
+/// akhir eksklusif). Tanpa `section`, `heading_line` + `block` ditambahkan di
+/// akhir file.
+fn insert_in_section(
+    lines: &mut Vec<String>,
+    section: Option<(usize, usize)>,
+    heading_line: &str,
+    block: Vec<String>,
+) {
     let mask = code_mask(lines);
-    match section_range(lines, &mask, heading) {
+    match section {
         Some((start, end)) => {
             let tasks: Vec<(usize, usize)> = (start + 1..end)
                 .filter(|&i| !mask[i])
@@ -697,11 +723,161 @@ fn insert_under_heading(lines: &mut Vec<String>, heading: &str, block: Vec<Strin
             if !lines.is_empty() {
                 lines.push(String::new());
             }
-            lines.push(heading.trim().to_string());
+            lines.push(heading_line.trim().to_string());
             lines.extend(block);
             lines.push(String::new());
         }
     }
+}
+
+/* ---------- List permanen (Tasks.md) ---------- */
+
+/// Satu list di Tasks.md: semua task di bawah heading `## Nama`.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct TaskList {
+    pub name: String,
+    /// `false` untuk Inbox yang hanya berisi task di luar heading `##`
+    /// (heading-nya belum ada di file).
+    pub heading: bool,
+    pub tasks: Vec<Task>,
+}
+
+/// List tempat task tanpa heading `##` berada.
+pub const INBOX: &str = "Inbox";
+
+/// Nama list dari baris heading `## Nama` (hanya level 2).
+fn list_heading(line: &str) -> Option<&str> {
+    if heading_level(line) != Some(2) {
+        return None;
+    }
+    Some(line.trim_start()[2..].trim()).filter(|n| !n.is_empty())
+}
+
+/// Nama list dibandingkan tanpa peduli huruf besar/kecil dan spasi tepi.
+pub fn same_list(a: &str, b: &str) -> bool {
+    a.trim().to_lowercase() == b.trim().to_lowercase()
+}
+
+/// Baca semua list dari isi Tasks.md, sesuai urutan heading di file.
+///
+/// - Setiap `## Nama` memulai list; `###` dan lebih dalam tetap bagian list itu.
+/// - `#` (level 1) mengakhiri list yang sedang berjalan; task sesudahnya, juga
+///   task sebelum heading `##` pertama, milik Inbox.
+/// - Heading dengan nama sama (tanpa peduli huruf besar/kecil) digabung.
+/// - Heading dan task di dalam code block diabaikan.
+pub fn parse_lists(content: &str) -> Vec<TaskList> {
+    let (lines, _) = split_lines(content);
+    let mask = code_mask(&lines);
+    // (nama, punya heading di file)
+    let mut names: Vec<(String, bool)> = Vec::new();
+    let find_or_add = |name: &str, heading: bool, names: &mut Vec<(String, bool)>| match names
+        .iter()
+        .position(|(n, _)| same_list(n, name))
+    {
+        Some(i) => {
+            // Inbox implisit lalu ketemu "## Inbox": pakai ejaan heading-nya.
+            if heading && !names[i].1 {
+                names[i] = (name.to_string(), true);
+            }
+            i
+        }
+        None => {
+            names.push((name.to_string(), heading));
+            names.len() - 1
+        }
+    };
+    let mut current: Option<usize> = None;
+    let mut found: Vec<(usize, usize, ParsedLine)> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if mask[i] {
+            continue;
+        }
+        if let Some(name) = list_heading(line) {
+            current = Some(find_or_add(name, true, &mut names));
+        } else if heading_level(line) == Some(1) {
+            current = None;
+        } else if let Some(p) = parse_line(line) {
+            let list = match current {
+                Some(c) => c,
+                None => find_or_add(INBOX, false, &mut names),
+            };
+            found.push((list, i, p));
+        }
+    }
+    let mut grouped: Vec<Vec<(usize, ParsedLine)>> = names.iter().map(|_| Vec::new()).collect();
+    for (list, i, p) in found {
+        grouped[list].push((i, p));
+    }
+    names
+        .into_iter()
+        .zip(grouped)
+        .map(|((name, heading), raw)| TaskList { name, heading, tasks: build_tasks(raw) })
+        .collect()
+}
+
+/// Cocokkan nama yang diketik (`~kul`) dengan list yang ada: sama persis dulu,
+/// lalu awalan yang unik. Tidak peka huruf besar/kecil.
+pub fn resolve_list(names: &[String], query: &str) -> Result<String, String> {
+    let q = query.trim().to_lowercase();
+    if let Some(n) = names.iter().find(|n| n.to_lowercase() == q) {
+        return Ok(n.clone());
+    }
+    let hits: Vec<&String> = names.iter().filter(|n| !q.is_empty() && n.to_lowercase().starts_with(&q)).collect();
+    match hits.as_slice() {
+        [one] => Ok((*one).clone()),
+        [] => Err(format!("No list named \"{}\".", query.trim())),
+        many => Err(format!(
+            "\"~{}\" matches several lists: {}.",
+            query.trim(),
+            many.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+        )),
+    }
+}
+
+/// Rentang bagian list `name`: (baris heading, akhir eksklusif). Bagian
+/// berakhir di heading level 1 atau 2 berikutnya.
+fn list_range(lines: &[String], mask: &[bool], name: &str) -> Option<(usize, usize)> {
+    let start = (0..lines.len()).find(|&i| !mask[i] && list_heading(&lines[i]).is_some_and(|n| same_list(n, name)))?;
+    let end = (start + 1..lines.len())
+        .find(|&i| !mask[i] && heading_level(&lines[i]).is_some_and(|n| n <= 2))
+        .unwrap_or(lines.len());
+    Some((start, end))
+}
+
+/// Sisipkan baris-baris `block` di akhir list `name`. Heading `## name`
+/// ditambahkan di akhir file kalau belum ada.
+fn insert_into_list(content: &str, name: &str, block: Vec<String>) -> String {
+    let (mut lines, eol) = split_lines(content);
+    let section = list_range(&lines, &code_mask(&lines), name);
+    insert_in_section(&mut lines, section, &format!("## {}", name.trim()), block);
+    lines.join(eol)
+}
+
+/// Tambah `- [ ] text` di akhir list `name` di Tasks.md.
+pub fn add_to_list(content: &str, name: &str, text: &str) -> String {
+    let text = text.replace(['\r', '\n'], " ");
+    insert_into_list(content, name, vec![format!("- [ ] {}", text.trim())])
+}
+
+/// Masukkan blok task hasil `delete_task` (task + subtask, dipisah "\n") ke
+/// akhir list `name`. Indentasi blok digeser supaya task induknya jadi task
+/// teratas di list itu; subtask tetap menjorok relatif terhadapnya.
+pub fn insert_block(content: &str, name: &str, block: &str) -> String {
+    let block: Vec<&str> = block.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l)).collect();
+    let first = block.first().copied().unwrap_or_default();
+    let prefix = &first[..first.len() - first.trim_start().len()];
+    let lines = block
+        .iter()
+        .map(|l| l.strip_prefix(prefix).unwrap_or_else(|| l.trim_start()).to_string())
+        .collect();
+    insert_into_list(content, name, lines)
+}
+
+/// Pindahkan task di baris `line` (beserta subtask-nya) ke akhir list `name`,
+/// di dalam file yang sama.
+pub fn move_to_list(content: &str, line: usize, expected_text: &str, name: &str) -> Result<String, String> {
+    let (rest, removed) = delete_task(content, line, expected_text)?;
+    Ok(insert_block(&rest, name, &removed.text))
 }
 
 /* ---------- Heading & Notes ---------- */
@@ -1197,6 +1373,156 @@ mod tests {
         assert_eq!(back, changed.replace("1. [ ] Bernomor\n", "1. [ ] Bernomor\n- [X] Beli kabel\n"));
         // File jadi lebih pendek dari posisi lama.
         assert_eq!(restore_task("x\n", &removed, "## Tasks"), "x\n\n## Tasks\n- [X] Beli kabel\n");
+    }
+
+    /* ----- list permanen (Tasks.md) ----- */
+
+    const LISTS: &str = "# Tasks\n- [ ] yatim di atas\n\n## Kuliah\n- [ ] Laporan IoT ⏫ 📅 2026-11-20\n    - [x] Wiring\n### Minggu ini\n- [ ] Quiz\n\n## Personal\n- [ ] Gym\n```\n## Bukan list\n- [ ] di kode\n```\n- [ ] setelah kode\n\n## Kosong\n\n# Arsip\n- [ ] setelah heading level 1\n## inbox\n- [ ] di heading inbox\n";
+
+    fn summary(lists: &[TaskList]) -> Vec<(String, bool, Vec<(usize, usize, String)>)> {
+        lists
+            .iter()
+            .map(|l| (l.name.clone(), l.heading, l.tasks.iter().map(|t| (t.line, t.level, t.title.clone())).collect()))
+            .collect()
+    }
+
+    #[test]
+    fn parses_lists() {
+        let s = |v: &[(usize, usize, &str)]| v.iter().map(|&(a, b, c)| (a, b, c.to_string())).collect::<Vec<_>>();
+        assert_eq!(
+            summary(&parse_lists(LISTS)),
+            vec![
+                // Task sebelum heading ## pertama dan setelah "# Arsip" -> Inbox,
+                // digabung dengan "## inbox" (ejaan heading dipakai).
+                ("inbox".into(), true, s(&[(1, 0, "yatim di atas"), (20, 0, "setelah heading level 1"), (22, 0, "di heading inbox")])),
+                // ### tetap bagian list induknya.
+                ("Kuliah".into(), true, s(&[(4, 0, "Laporan IoT"), (5, 1, "Wiring"), (7, 0, "Quiz")])),
+                // Heading dan task di code block diabaikan.
+                ("Personal".into(), true, s(&[(10, 0, "Gym"), (15, 0, "setelah kode")])),
+                ("Kosong".into(), true, s(&[])),
+            ]
+        );
+        let kuliah = &parse_lists(LISTS)[1].tasks[0];
+        assert_eq!((kuliah.priority, kuliah.due.as_deref()), (Priority::High, Some("2026-11-20")));
+    }
+
+    #[test]
+    fn parses_lists_edge_cases() {
+        // File kosong / tidak ada.
+        assert!(parse_lists("").is_empty());
+        assert!(parse_lists("\r\n\r\n").is_empty());
+        // Hanya task tanpa heading: Inbox tanpa heading.
+        assert_eq!(summary(&parse_lists("- [ ] a\n- [ ] b")), vec![("Inbox".into(), false, vec![(0, 0, "a".into()), (1, 0, "b".into())])]);
+        // Heading saja, heading ganda digabung, CRLF.
+        let crlf = "## A\r\n- [ ] 1\r\n## B\r\n## a\r\n- [ ] 2\r\n";
+        assert_eq!(
+            summary(&parse_lists(crlf)),
+            vec![("A".into(), true, vec![(1, 0, "1".into()), (4, 0, "2".into())]), ("B".into(), true, vec![])]
+        );
+        // "##Tanpa spasi" dan "## " kosong bukan list.
+        assert_eq!(summary(&parse_lists("##Rapat\n## \n- [ ] x\n")), vec![("Inbox".into(), false, vec![(2, 0, "x".into())])]);
+        // Level dihitung per list: subtask tidak menempel ke task di list sebelumnya.
+        let t = parse_lists("## A\n- [ ] a\n## B\n    - [ ] b\n");
+        assert_eq!(t[1].tasks[0].level, 0);
+    }
+
+    #[test]
+    fn resolves_list_names() {
+        let names: Vec<String> = ["Inbox", "Kuliah", "Kerja", "Side Projects"].map(String::from).to_vec();
+        assert_eq!(resolve_list(&names, "kuliah").unwrap(), "Kuliah");
+        assert_eq!(resolve_list(&names, "KUL").unwrap(), "Kuliah");
+        assert_eq!(resolve_list(&names, "side").unwrap(), "Side Projects");
+        assert_eq!(resolve_list(&names, "i").unwrap(), "Inbox");
+        assert_eq!(resolve_list(&names, "zz").unwrap_err(), "No list named \"zz\".");
+        assert!(resolve_list(&names, "k").unwrap_err().contains("Kuliah, Kerja"));
+        assert!(resolve_list(&names, "").is_err());
+        assert!(resolve_list(&[], "inbox").is_err());
+        // Persis menang atas awalan.
+        let names: Vec<String> = ["Kul", "Kuliah"].map(String::from).to_vec();
+        assert_eq!(resolve_list(&names, "kul").unwrap(), "Kul");
+    }
+
+    #[test]
+    fn parses_list_token() {
+        let q = parse_quick("Laporan ~kul !high @tomorrow", today());
+        assert_eq!((q.title.as_str(), q.list.as_deref()), ("Laporan", Some("kul")));
+        assert_eq!(q.priority, Some(Priority::High));
+        // "~" tanpa huruf bukan token.
+        let q = parse_quick("Lari ~5 km ~ santai", today());
+        assert_eq!((q.title.as_str(), q.list), ("Lari ~5 km ~ santai", None));
+        // Token terakhir menang.
+        assert_eq!(parse_quick("a ~x ~Kerja", today()).list.as_deref(), Some("Kerja"));
+        // Token list tidak ikut ke teks task.
+        assert_eq!(compose_task(&title("a ~kul !low"), today()).unwrap(), "a 🔽");
+    }
+
+    #[test]
+    fn adds_to_list() {
+        // Setelah task terakhir list itu (termasuk yang di bawah ###), bukan di akhir file.
+        let out = add_to_list(LISTS, "kuliah", "Baru 📅 2026-11-21");
+        assert_eq!(out, LISTS.replace("- [ ] Quiz\n", "- [ ] Quiz\n- [ ] Baru 📅 2026-11-21\n"));
+        assert_eq!(parse_lists(&out)[1].tasks.last().unwrap().title, "Baru");
+        // List kosong.
+        let out = add_to_list(LISTS, "Kosong", "x");
+        assert_eq!(out, LISTS.replace("## Kosong\n", "## Kosong\n- [ ] x\n"));
+        // Heading di dalam code block bukan tujuan; list belum ada -> heading baru di akhir.
+        let out = add_to_list(LISTS, "Bukan list", "y");
+        assert!(out.ends_with("- [ ] di heading inbox\n\n## Bukan list\n- [ ] y\n"));
+        // Task setelah code block di list yang sama dihitung sebagai task terakhir.
+        let out = add_to_list(LISTS, "Personal", "z");
+        assert_eq!(out, LISTS.replace("- [ ] setelah kode\n", "- [ ] setelah kode\n- [ ] z\n"));
+    }
+
+    #[test]
+    fn adds_to_missing_or_empty_tasks_file() {
+        assert_eq!(add_to_list("", INBOX, "a"), "## Inbox\n- [ ] a\n");
+        assert_eq!(add_to_list("\n\n", INBOX, "a"), "## Inbox\n- [ ] a\n");
+        // Task yatim tidak dipindah; heading Inbox ditambahkan di akhir.
+        assert_eq!(add_to_list("- [ ] lama\n", INBOX, "a"), "- [ ] lama\n\n## Inbox\n- [ ] a\n");
+        // CRLF dipertahankan.
+        let crlf = "## Inbox\r\n- [ ] a\r\n\r\n## Kuliah\r\n- [ ] b\r\n";
+        assert_eq!(add_to_list(crlf, "inbox", "c"), "## Inbox\r\n- [ ] a\r\n- [ ] c\r\n\r\n## Kuliah\r\n- [ ] b\r\n");
+        assert_eq!(add_to_list(crlf, "Baru", "d"), format!("{crlf}\r\n## Baru\r\n- [ ] d\r\n"));
+    }
+
+    #[test]
+    fn moves_task_with_subtasks_within_tasks_file() {
+        let note = "## Inbox\n- [ ] induk ⏫\n    - [ ] anak\n        - [x] cucu\n- [ ] lain\n\n## Kuliah\n- [ ] k1\n";
+        let out = move_to_list(note, 1, "induk ⏫", "Kuliah").unwrap();
+        assert_eq!(out, "## Inbox\n- [ ] lain\n\n## Kuliah\n- [ ] k1\n- [ ] induk ⏫\n    - [ ] anak\n        - [x] cucu\n");
+        // Subtask yang dipindah sendiri jadi task teratas; anaknya ikut menjorok.
+        let out = move_to_list(note, 2, "anak", "Kuliah").unwrap();
+        assert_eq!(out, "## Inbox\n- [ ] induk ⏫\n- [ ] lain\n\n## Kuliah\n- [ ] k1\n- [ ] anak\n    - [x] cucu\n");
+        // Ke list yang belum ada: heading dibuat di akhir.
+        let out = move_to_list(note, 4, "lain", "Baru").unwrap();
+        assert!(out.ends_with("- [ ] k1\n\n## Baru\n- [ ] lain\n"));
+        // Ditolak kalau file berubah; task di code block tidak bisa dipindah.
+        assert!(move_to_list(note, 1, "induk", "Kuliah").is_err());
+        assert!(move_to_list("```\n- [ ] x\n```\n", 1, "x", "Inbox").is_err());
+        // CRLF.
+        let crlf = note.replace('\n', "\r\n");
+        assert_eq!(move_to_list(&crlf, 1, "induk ⏫", "Kuliah").unwrap(), move_to_list(note, 1, "induk ⏫", "Kuliah").unwrap().replace('\n', "\r\n"));
+    }
+
+    #[test]
+    fn moves_task_between_files() {
+        // Langkah yang dipakai lib.rs: delete_task di sumber (validasi + blok),
+        // insert_block di tujuan, lalu delete_task lagi di sumber yang dibaca ulang.
+        let daily = "# 2026-11-17\r\n## Tasks\r\n- [ ] dari daily 📅 2026-11-18\r\n\t- [ ] sub pakai tab\r\n- [ ] tinggal\r\n";
+        let tasks_md = "## Inbox\n- [ ] a\n\n## Kuliah\n";
+        let (daily_after, removed) = delete_task(daily, 2, "dari daily 📅 2026-11-18").unwrap();
+        assert_eq!(daily_after, "# 2026-11-17\r\n## Tasks\r\n- [ ] tinggal\r\n");
+        let dst = insert_block(tasks_md, "Kuliah", &removed.text);
+        // Tujuan memakai line ending-nya sendiri (LF), tab tetap tab.
+        assert_eq!(dst, "## Inbox\n- [ ] a\n\n## Kuliah\n- [ ] dari daily 📅 2026-11-18\n\t- [ ] sub pakai tab\n");
+        // Sumber berubah di antara tulis tujuan dan hapus sumber: hapus ditolak,
+        // task tetap ada di sumber (sementara dobel, tidak hilang).
+        let edited = daily.replace("dari daily", "dari daily (diedit)");
+        assert!(delete_task(&edited, 2, "dari daily 📅 2026-11-18").is_err());
+        // Blok berindentasi dari daily note: induk jadi task teratas.
+        let nested = "- [ ] p\n    - [ ] q\n        - [ ] r\n";
+        let (_, removed) = delete_task(nested, 1, "q").unwrap();
+        assert_eq!(insert_block("", "Inbox", &removed.text), "## Inbox\n- [ ] q\n    - [ ] r\n");
     }
 
     /* ----- notes ----- */

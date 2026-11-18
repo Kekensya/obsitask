@@ -1,6 +1,6 @@
 # ObsiTask
 
-Widget desktop kecil yang menampilkan task dari **daily note Obsidian** hari ini, plus kotak catatan singkat — tanpa perlu membuka Obsidian.
+Widget desktop kecil untuk task di vault Obsidian: task dari **daily note** hari ini, **list permanen** di `Tasks.md`, plus kotak catatan singkat — tanpa perlu membuka Obsidian.
 
 Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
 
@@ -16,10 +16,18 @@ Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
 - **Overdue & due** — di atas daftar, task belum selesai dari daily note hari-hari sebelumnya yang deadline-nya paling lambat hari yang ditampilkan, lengkap dengan asal note-nya ("from Nov 10"). Mencentang, mengedit, mengubah prioritas/deadline, atau menghapus dari sini menulis ke file asalnya, dengan pengaman yang sama. Bagian ini bisa dilipat.
   - Jumlah hari yang dipindai diatur di Settings ("Look back for due tasks", default 30, maksimum 365, 0 = mati).
   - Hasil parse tiap note di-cache berdasarkan waktu modifikasi + ukuran file, jadi polling 2 detik hanya mengecek metadata file; note dibaca ulang hanya kalau berubah.
+- **List permanen (tab All)** — task yang tidak terikat hari tinggal di satu file, default `Tasks.md` di root vault (bisa diatur di Settings). Task di sana tidak "hilang" saat ganti hari; hanya hilang dari tampilan kalau dicentang.
+  - Setiap heading `## Nama` adalah satu list, sesuai urutan di file. `###` dan lebih dalam tetap bagian list di atasnya. `#` mengakhiri list; task sesudahnya, juga task sebelum heading `##` pertama, masuk Inbox. Heading dengan nama sama digabung. Heading dan task di dalam code block diabaikan.
+  - Format baris dan metadata sama persis dengan di daily note.
+  - Tab All menampilkan semua list (bisa dilipat, dengan jumlah task belum selesai), masing-masing dengan input "Add to …" sendiri. Task selesai disembunyikan; tombol "Show completed" menampilkannya.
+  - Kotak "Add a task…" di tab All menambah ke list default (default `Inbox`, bisa diatur). List default selalu tampil walau heading-nya belum ada; heading-nya dibuat saat task pertama masuk. `Tasks.md` dibuat kalau belum ada.
+  - **Token `~list`** di quick-add memilih list, tidak peka huruf besar/kecil dan boleh awalan unik (`~kul` → Kuliah). Di tab hari, `~list` mengirim task ke `Tasks.md` alih-alih daily note. Kalau tidak ada list yang cocok, task tidak disimpan dan muncul pesan "No list named …". List baru tidak dibuat dari widget: membuat, mengganti nama, dan menghapus list dilakukan di Obsidian dengan mengedit heading.
+  - **Move to list** (menu `⋯`) memindahkan task beserta subtask-nya ke akhir list lain, dari `Tasks.md` maupun dari daily note. Antar file urutannya: cek baris di file asal → tulis ke `Tasks.md` → hapus dari file asal (dicek ulang). Kalau langkah terakhir gagal karena file asal berubah, task dibiarkan ada di dua tempat (tidak hilang) dan widget memberi tahu.
+  - Mengubah list lewat edit judul (`~list` di judul) ditolak; pakai Move to list.
 - **Notes** — isi di bawah heading `## Notes` di daily note yang sama. Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
-- **Yesterday / Today / Tomorrow** — pindah ke daily note kemarin atau besok.
-- File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul.
-- Tombol hijau membuka daily note itu di Obsidian (dan membuatnya kalau belum ada).
+- **Yesterday / Today / Tomorrow / All** — pindah ke daily note kemarin atau besok, atau ke semua list. Tab All memakai Notes hari ini.
+- File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul. `Tasks.md` juga di-cache berdasarkan waktu modifikasi + ukuran.
+- Tombol hijau membuka daily note itu (atau `Tasks.md` di tab All) di Obsidian, dan membuatnya kalau belum ada.
 - Tombol pin = always-on-top. Posisi dan ukuran window diingat.
 
 Keterangan kecil di bawah task: jam di depan teks (`- [ ] 15:00 Rapat`) dan deadline (merah kalau sudah lewat). Warna lingkaran checkbox menandai prioritas.
@@ -47,7 +55,7 @@ src/                  frontend widget
   main.js             buka index.html langsung di browser = mode contoh data
 src-tauri/
   src/tasks.rs        parser + penulis task/notes (logika murni, ada unit test)
-  src/scan.rs         cache parse daily note (mtime + ukuran) untuk "Overdue & due"
+  src/scan.rs         cache parse file (mtime + ukuran): daily note lama dan Tasks.md
   src/config.rs       config + konversi format tanggal Obsidian
   src/lib.rs          command Tauri
   tauri.conf.json     ukuran & sifat window
@@ -59,8 +67,11 @@ Config tersimpan di `%APPDATA%\com.kekensya.obsitask\config.json`.
 
 ## Belum ada (sengaja)
 
-- Task ber-deadline yang ditulis di daily note *setelah* hari yang ditampilkan, atau di note selain daily note, tidak ikut dipindai.
-- Recurring task, reminder/notifikasi, pomodoro, project/tag manager, drag-and-drop reorder, sinkronisasi.
+- Task ber-deadline yang ditulis di daily note *setelah* hari yang ditampilkan, atau di note selain daily note dan `Tasks.md`, tidak ikut dipindai.
+- Task di `Tasks.md` belum ikut tampil di tab hari (Overdue / Today) — tab Today / Upcoming / All menyusul.
+- UI untuk membuat, mengganti nama, atau menghapus list (lakukan di Obsidian dengan mengedit heading `##`).
+- Memindahkan task dari `Tasks.md` kembali ke daily note.
+- Recurring task, reminder/notifikasi, pomodoro, smart list/filter kustom, tag view, arsip task selesai, drag-and-drop reorder, sinkronisasi.
 - Prioritas `🔺` / `⏬` plugin Tasks tidak dikelola (dibiarkan apa adanya di baris).
 - Efek blur ke desktop (acrylic/mica). Panel sekarang semi-transparan biasa.
 - Tray icon dan autostart saat Windows menyala.
