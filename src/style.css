@@ -405,6 +405,41 @@ button:focus-visible, textarea:focus-visible, input:focus-visible {
 .pop-danger span { display: grid; }
 .pop-danger svg { width: 14px; height: 14px; }
 
+/* Label grup: "Overdue & due" (bisa dilipat) dan nama hari untuk task note ini. */
+.task-list .group {
+  display: flex;
+  margin: 6px 2px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.task-list .group:first-child { margin-top: 0; }
+.task-list .group > * {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+.task-list .group button:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
+.task-list .group .chev { display: grid; }
+.task-list .group .chev svg { width: 11px; height: 11px; stroke-width: 2.4; transform: rotate(90deg); transition: transform 0.12s; }
+.task-list .group.collapsed .chev svg { transform: none; }
+.task-list .group-count {
+  padding: 0 5px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: rgba(255, 95, 82, 0.28);
+}
+.task-list .group-empty { padding: 3px 8px 6px; font-size: 12px; color: var(--faint); }
+
 .empty {
   margin: auto;
   padding: 8px 14px;
@@ -496,7 +531,7 @@ textarea:focus { outline: none; border-color: rgba(47, 148, 97, 0.6); }
 .sheet small { font-weight: 400; color: var(--faint); }
 .sheet .row { display: flex; gap: 6px; }
 
-.sheet input[type="text"] {
+.sheet input[type="text"], .sheet input[type="number"] {
   flex: 1;
   min-width: 0;
   padding: 7px 9px;

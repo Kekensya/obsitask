@@ -1,11 +1,14 @@
 mod config;
+mod scan;
 mod tasks;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use chrono::{Duration, Local, NaiveDate};
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use config::{Config, DetectedDaily};
@@ -22,7 +25,24 @@ struct DayView {
     tasks: Vec<tasks::Task>,
     notes: String,
     hide_completed: bool,
+    /// Task belum selesai dari daily note hari-hari sebelumnya yang deadline-nya
+    /// paling lambat hari yang ditampilkan (bagian "Overdue & due").
+    due: Vec<DueTask>,
 }
+
+/// Task dari daily note lain. `offset` menunjuk file asalnya, jadi command
+/// tulis yang sama (toggle/update/delete) bisa dipakai langsung.
+#[derive(Serialize)]
+struct DueTask {
+    offset: i64,
+    /// Tanggal daily note asal (YYYY-MM-DD).
+    date: String,
+    #[serde(flatten)]
+    task: tasks::Task,
+}
+
+/// Cache parse daily note untuk pemindaian, dipakai bersama semua command.
+type Scan = Mutex<scan::NoteCache>;
 
 /// Hasil menghapus task: tampilan baru + data untuk undo.
 #[derive(Serialize)]
@@ -76,7 +96,39 @@ fn day(offset: i64) -> NaiveDate {
     today() + Duration::days(offset)
 }
 
-fn build_view(cfg: &Config, offset: i64) -> DayView {
+fn iso(d: NaiveDate) -> String {
+    d.format("%Y-%m-%d").to_string()
+}
+
+/// Pindai daily note `scan_days` hari sebelum `date` (pakai cache mtime) dan
+/// kumpulkan task belum selesai yang deadline-nya <= `date`.
+fn collect_due(cfg: &Config, date: NaiveDate, scan: &Scan) -> Vec<DueTask> {
+    let through = iso(date);
+    let base = today();
+    let mut cache = scan.lock().unwrap_or_else(|e| e.into_inner());
+    // Format tanggal tanpa hari (mis. bulanan) bisa memetakan beberapa tanggal
+    // ke file yang sama; file hari yang sedang tampil juga dilewati.
+    let mut seen: HashSet<PathBuf> = HashSet::from([cfg.daily_note_path(date)]);
+    let mut out = Vec::new();
+    for back in 1..=i64::from(cfg.scan_days.min(config::MAX_SCAN_DAYS)) {
+        let d = date - Duration::days(back);
+        let path = cfg.daily_note_path(d);
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        if let Some(found) = cache.tasks(&path) {
+            out.extend(tasks::due_by(&found, &through).into_iter().map(|task| DueTask {
+                offset: (d - base).num_days(),
+                date: iso(d),
+                task,
+            }));
+        }
+    }
+    cache.retain(|p| seen.contains(p));
+    out
+}
+
+fn build_view(cfg: &Config, offset: i64, scan: &Scan) -> DayView {
     let date = day(offset);
     let mut view = DayView {
         configured: cfg.is_configured(),
@@ -86,11 +138,13 @@ fn build_view(cfg: &Config, offset: i64) -> DayView {
         tasks: Vec::new(),
         notes: String::new(),
         hide_completed: cfg.hide_completed,
+        due: Vec::new(),
     };
     if !view.configured {
         return view;
     }
     view.file = cfg.daily_note_rel(date);
+    view.due = collect_due(cfg, date, scan);
     if let Ok(content) = std::fs::read_to_string(cfg.daily_note_path(date)) {
         view.exists = true;
         view.tasks = tasks::parse_tasks(&content);
@@ -146,6 +200,7 @@ fn save_config(app: AppHandle, config: Config) -> Result<(), String> {
     }
     cfg.notes_heading = notes_heading(&cfg);
     cfg.tasks_heading = tasks_heading(&cfg);
+    cfg.scan_days = cfg.scan_days.min(config::MAX_SCAN_DAYS);
     cfg.save(&config_path(&app)?)
 }
 
@@ -165,17 +220,28 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-fn get_day(app: AppHandle, offset: i64) -> Result<DayView, String> {
-    Ok(build_view(&load_config(&app)?, offset))
+fn get_day(app: AppHandle, scan: State<Scan>, offset: i64) -> Result<DayView, String> {
+    Ok(build_view(&load_config(&app)?, offset, &scan))
 }
 
+// Command tulis: `offset` = daily note yang diubah (bisa file asal task di
+// "Overdue & due"); `show` = hari yang sedang tampil di widget, untuk tampilan
+// yang dikembalikan (default: sama dengan `offset`).
+
 #[tauri::command]
-fn toggle_task(app: AppHandle, offset: i64, line: usize, text: String) -> Result<DayView, String> {
+fn toggle_task(
+    app: AppHandle,
+    scan: State<Scan>,
+    offset: i64,
+    line: usize,
+    text: String,
+    show: Option<i64>,
+) -> Result<DayView, String> {
     let cfg = load_config(&app)?;
     edit_note(&cfg, offset, false, |content| {
         Ok((tasks::toggle_task(content, line, &text, today())?, ()))
     })?;
-    Ok(build_view(&cfg, offset))
+    Ok(build_view(&cfg, show.unwrap_or(offset), &scan))
 }
 
 /// Tambah task baru di bawah heading task. `text` boleh berisi token quick-add
@@ -183,6 +249,7 @@ fn toggle_task(app: AppHandle, offset: i64, line: usize, text: String) -> Result
 #[tauri::command]
 fn add_task(
     app: AppHandle,
+    scan: State<Scan>,
     offset: i64,
     text: String,
     priority: Option<String>,
@@ -198,20 +265,23 @@ fn add_task(
     edit_note(&cfg, offset, true, |content| {
         Ok((tasks::add_task(content, &tasks_heading(&cfg), &task), ()))
     })?;
-    Ok(build_view(&cfg, offset))
+    Ok(build_view(&cfg, offset, &scan))
 }
 
 /// Ubah judul / prioritas / deadline. Argumen yang tidak dikirim tidak diubah;
 /// `due` kosong menghapus deadline.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn update_task(
     app: AppHandle,
+    scan: State<Scan>,
     offset: i64,
     line: usize,
     text: String,
     title: Option<String>,
     priority: Option<String>,
     due: Option<String>,
+    show: Option<i64>,
 ) -> Result<DayView, String> {
     let cfg = load_config(&app)?;
     let edit = tasks::Edit {
@@ -222,17 +292,24 @@ fn update_task(
     edit_note(&cfg, offset, false, |content| {
         Ok((tasks::update_task(content, line, &text, &edit, today())?, ()))
     })?;
-    Ok(build_view(&cfg, offset))
+    Ok(build_view(&cfg, show.unwrap_or(offset), &scan))
 }
 
 #[tauri::command]
-fn delete_task(app: AppHandle, offset: i64, line: usize, text: String) -> Result<Deleted, String> {
+fn delete_task(
+    app: AppHandle,
+    scan: State<Scan>,
+    offset: i64,
+    line: usize,
+    text: String,
+    show: Option<i64>,
+) -> Result<Deleted, String> {
     let cfg = load_config(&app)?;
     let removed = edit_note(&cfg, offset, false, |content| {
         tasks::delete_task(content, line, &text)
     })?;
     Ok(Deleted {
-        view: build_view(&cfg, offset),
+        view: build_view(&cfg, show.unwrap_or(offset), &scan),
         removed,
     })
 }
@@ -241,27 +318,29 @@ fn delete_task(app: AppHandle, offset: i64, line: usize, text: String) -> Result
 #[tauri::command]
 fn restore_task(
     app: AppHandle,
+    scan: State<Scan>,
     offset: i64,
     line: usize,
     text: String,
     anchor: Option<String>,
+    show: Option<i64>,
 ) -> Result<DayView, String> {
     let cfg = load_config(&app)?;
     let removed = tasks::Removed { line, text, anchor };
     edit_note(&cfg, offset, true, |content| {
         Ok((tasks::restore_task(content, &removed, &tasks_heading(&cfg)), ()))
     })?;
-    Ok(build_view(&cfg, offset))
+    Ok(build_view(&cfg, show.unwrap_or(offset), &scan))
 }
 
 #[tauri::command]
-fn save_notes(app: AppHandle, offset: i64, notes: String) -> Result<DayView, String> {
+fn save_notes(app: AppHandle, scan: State<Scan>, offset: i64, notes: String) -> Result<DayView, String> {
     let cfg = load_config(&app)?;
     // Daily note yang belum ada dianggap kosong, dan baru dibuat kalau ada isinya.
     edit_note(&cfg, offset, true, |content| {
         Ok((tasks::write_notes(content, &notes_heading(&cfg), &notes), ()))
     })?;
-    Ok(build_view(&cfg, offset))
+    Ok(build_view(&cfg, offset, &scan))
 }
 
 fn percent_encode(s: &str) -> String {
@@ -325,6 +404,7 @@ fn open_in_obsidian(app: AppHandle, offset: i64) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Scan::default())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![

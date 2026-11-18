@@ -118,6 +118,8 @@ function describeTask(task) {
     overdue = !isClosed(task) && task.due < isoToday();
     subs.push((overdue ? "Overdue · " : "Due ") + dayLabel(task.due));
   }
+  // Task dari daily note lain (bagian "Overdue & due"): sebut asalnya.
+  if (task.date) subs.push("from " + dayLabel(task.date));
 
   const html = escapeHtml(text)
     .replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1") // [[link|alias]] -> alias
@@ -189,7 +191,8 @@ function renderTask(task) {
     "li",
     {
       class: `task p-${task.priority}` + (task.done ? " done" : "") + (task.cancelled ? " cancelled" : ""),
-      style: `padding-left:${4 + task.level * 18}px`,
+      // Task dari note lain tampil rata, tanpa indentasi asalnya.
+      style: `padding-left:${4 + (task.date ? 0 : task.level) * 18}px`,
       oncontextmenu: (e) => {
         e.preventDefault();
         openTaskMenu(task, more);
@@ -202,21 +205,82 @@ function renderTask(task) {
   return li;
 }
 
+/** Task "Overdue & due": prioritas, lalu deadline, lalu note asal yang lebih lama. */
+function sortDue(tasks) {
+  const key = (t) => [PRIORITY_RANK[t.priority] ?? 3, t.due, t.date, t.line];
+  return [...tasks].sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    for (let i = 0; i < ka.length; i++) {
+      if (ka[i] !== kb[i]) return ka[i] < kb[i] ? -1 : 1;
+    }
+    return 0;
+  });
+}
+
+function readDueCollapsed() {
+  try {
+    return localStorage.getItem("dueCollapsed") === "true";
+  } catch {
+    return false;
+  }
+}
+
+/** Label kecil pemisah grup di daftar. Dengan `onToggle`, label bisa dilipat. */
+function groupLabel(text, { count, collapsed, onToggle } = {}) {
+  const inner = [
+    onToggle && h("span", { class: "chev", html: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>' }),
+    h("span", {}, text),
+    count != null && h("span", { class: "group-count" }, String(count)),
+  ];
+  return h(
+    "li",
+    { class: "group" + (collapsed ? " collapsed" : "") },
+    onToggle ? h("button", { type: "button", "aria-expanded": String(!collapsed), onclick: onToggle }, ...inner) : h("span", {}, ...inner)
+  );
+}
+
 function renderTasks(view) {
   const all = view.tasks;
   const shown = sortTasks(view.hide_completed ? all.filter((t) => !isClosed(t)) : all);
   const doneCount = all.filter(isClosed).length;
+  const due = sortDue(view.due || []);
 
   el.count.textContent = all.length ? `${doneCount}/${all.length}` : "";
-  el.tasks.replaceChildren(...shown.map(renderTask));
 
   let message = "";
   if (!view.exists) message = "No daily note for this day yet. Add a task to create it.";
   else if (!all.length) message = "No tasks in this note.";
   else if (!shown.length) message = "All done.";
+
+  const rows = [];
+  if (due.length) {
+    const collapsed = readDueCollapsed();
+    rows.push(
+      groupLabel("Overdue & due", {
+        count: due.length,
+        collapsed,
+        onToggle: () => {
+          try {
+            localStorage.setItem("dueCollapsed", String(!collapsed));
+          } catch {}
+          renderTasks(state.view);
+        },
+      })
+    );
+    if (!collapsed) rows.push(...due.map(renderTask));
+    const tab = el.tabs.find((b) => b.getAttribute("aria-selected") === "true");
+    rows.push(groupLabel(tab ? tab.textContent : "This note"));
+    if (message) rows.push(h("li", { class: "group-empty" }, message));
+  }
+  rows.push(...shown.map(renderTask));
+  el.tasks.replaceChildren(...rows);
+
+  // Pesan besar di tengah hanya kalau tidak ada apa pun untuk ditampilkan.
+  const nothing = !due.length && !!message;
   el.empty.textContent = message;
-  el.empty.hidden = !message;
-  el.tasks.hidden = !!message;
+  el.empty.hidden = !nothing;
+  el.tasks.hidden = nothing;
   state.stale = false;
 }
 
@@ -265,14 +329,15 @@ async function refresh(force = false) {
 }
 
 /**
- * Jalankan command yang mengubah daily note hari yang sedang tampil, lalu
- * gambar hasilnya. Mengembalikan hasil command, atau null kalau gagal.
+ * Jalankan command yang mengubah daily note `src` (default: hari yang sedang
+ * tampil), lalu gambar hari yang sedang tampil. Mengembalikan hasil command,
+ * atau null kalau gagal.
  */
-async function mutate(cmd, args) {
-  const offset = state.offset;
+async function mutate(cmd, args, src = state.offset) {
+  const show = state.offset;
   try {
-    const result = await invoke(cmd, { offset, ...args });
-    if (offset === state.offset) applyView(result.view || result);
+    const result = await invoke(cmd, { offset: src, show, ...args });
+    if (show === state.offset) applyView(result.view || result);
     return result;
   } catch (err) {
     showToast(String(err));
@@ -282,20 +347,23 @@ async function mutate(cmd, args) {
 }
 
 const target = (task) => ({ line: task.line, text: task.text });
+/** Daily note asal task: task "Overdue & due" membawa `offset` file asalnya. */
+const srcOf = (task) => task.offset ?? state.offset;
 
-const toggleTask = (task) => mutate("toggle_task", target(task));
+const toggleTask = (task) => mutate("toggle_task", target(task), srcOf(task));
 
 async function deleteTask(task) {
-  const offset = state.offset;
-  const result = await mutate("delete_task", target(task));
+  const src = srcOf(task);
+  const show = state.offset;
+  const result = await mutate("delete_task", target(task), src);
   if (!result) return;
   showToast("Task deleted", {
     ms: UNDO_MS,
     action: "Undo",
     run: async () => {
       try {
-        const view = await invoke("restore_task", { offset, ...result.removed });
-        if (offset === state.offset) applyView(view);
+        const view = await invoke("restore_task", { offset: src, show, ...result.removed });
+        if (show === state.offset) applyView(view);
       } catch (err) {
         showToast(String(err));
       }
@@ -319,7 +387,7 @@ function startEdit(task, titleEl) {
     const value = input.value.trim();
     if (save && value && value !== task.title) {
       state.stale = true; // gambar ulang walau command gagal
-      await mutate("update_task", { ...target(task), title: value });
+      await mutate("update_task", { ...target(task), title: value }, srcOf(task));
     } else {
       state.stale = true;
     }
@@ -427,7 +495,7 @@ function dueSection(current, pick) {
 function openTaskMenu(task, anchor) {
   const change = (patch) => {
     closePopover();
-    mutate("update_task", { ...target(task), ...patch });
+    mutate("update_task", { ...target(task), ...patch }, srcOf(task));
   };
   openPopover(
     anchor,
@@ -609,6 +677,7 @@ const field = {
   tasksHeading: $("f-tasks-heading"),
   heading: $("f-heading"),
   hide: $("f-hide"),
+  scan: $("f-scan"),
 };
 
 async function openSettings(firstRun = false) {
@@ -621,6 +690,7 @@ async function openSettings(firstRun = false) {
   field.tasksHeading.value = cfg.tasks_heading;
   field.heading.value = cfg.notes_heading;
   field.hide.checked = cfg.hide_completed;
+  field.scan.value = cfg.scan_days;
   $("settings-title").textContent = firstRun ? "Set up ObsiTask" : "Settings";
   $("btn-cancel").hidden = firstRun;
   el.formError.hidden = true;
@@ -657,6 +727,7 @@ el.form.addEventListener("submit", async (e) => {
         tasks_heading: field.tasksHeading.value.trim() || "## Tasks",
         notes_heading: field.heading.value.trim() || "## Notes",
         hide_completed: field.hide.checked,
+        scan_days: Math.max(0, Math.min(365, Math.round(Number(field.scan.value) || 0))),
       },
     });
     el.settings.hidden = true;
@@ -735,33 +806,48 @@ function mockInvoke() {
     t.text = [t.title, EMOJI[t.priority], t.due && `📅 ${t.due}`, t.done_date && `✅ ${t.done_date}`].filter(Boolean).join(" ");
     return t;
   };
-  const make = (line, level, title, extra = {}) =>
-    sync({ line, level, title, done: false, cancelled: false, priority: "none", due: null, done_date: null, ...extra });
-  let tasks = [
-    make(3, 0, "Kerjain laporan projek akhir IoT", { priority: "high", due: isoPlus(-7) }),
-    make(4, 1, "Wiring sensor gate", { done: true, done_date: isoPlus(-1) }),
-    make(5, 1, "Tulis bab pengujian", { priority: "medium" }),
-    make(6, 0, "Review PR **ObsiTask** #dev", { priority: "low" }),
-    make(7, 0, "15:00 Rapat asisten praktikum", { due: isoToday() }),
-    make(8, 0, "Baca [[Paper ICN|paper ICN]] bab 2", { due: isoPlus(3) }),
-    make(9, 0, "Beli kabel jumper", { done: true, done_date: isoToday() }),
-  ];
-  let notes = "Ide: widget cukup baca daily note.\nTanya dosen soal jadwal demo.";
-  const renumber = () => tasks.forEach((t, i) => (t.line = 3 + i));
+  const make = (level, title, extra = {}) =>
+    sync({ line: 0, level, title, done: false, cancelled: false, priority: "none", due: null, done_date: null, ...extra });
+
+  // Daily note contoh per offset hari (0 = hari ini). Nomor baris diurutkan ulang.
+  const days = {
+    "-6": [make(0, "Kirim revisi proposal", { priority: "high", due: isoPlus(-2) }), make(0, "Sudah beres", { due: isoPlus(-3), done: true, done_date: isoPlus(-3) })],
+    "-3": [make(0, "Bayar tagihan internet", { due: isoToday() }), make(0, "Tanpa deadline")],
+    0: [
+      make(0, "Kerjain laporan projek akhir IoT", { priority: "high", due: isoPlus(-7) }),
+      make(1, "Wiring sensor gate", { done: true, done_date: isoPlus(-1) }),
+      make(1, "Tulis bab pengujian", { priority: "medium" }),
+      make(0, "Review PR **ObsiTask** #dev", { priority: "low" }),
+      make(0, "15:00 Rapat asisten praktikum", { due: isoToday() }),
+      make(0, "Baca [[Paper ICN|paper ICN]] bab 2", { due: isoPlus(3) }),
+      make(0, "Beli kabel jumper", { done: true, done_date: isoToday() }),
+    ],
+  };
+  const notes = { 0: "Ide: widget cukup baca daily note.\nTanya dosen soal jadwal demo." };
+  const renumber = (offset) => (days[offset] || []).forEach((t, i) => (t.line = 3 + i));
+  Object.keys(days).forEach(renumber);
+
   const view = (offset) => {
     const date = isoPlus(offset);
+    const due = [];
+    for (let back = 1; back <= 30; back++) {
+      for (const t of days[offset - back] || []) {
+        if (!t.done && !t.cancelled && t.due && t.due <= date) due.push({ ...t, offset: offset - back, date: isoPlus(offset - back) });
+      }
+    }
     return {
       configured: true,
       date,
       file: `Daily/${date}.md`,
-      exists: offset !== 1,
-      tasks: offset === 0 ? tasks.map((t) => ({ ...t })) : [],
-      notes: offset === 0 ? notes : "",
+      exists: offset in days,
+      tasks: (days[offset] || []).map((t) => ({ ...t })),
+      notes: notes[offset] || "",
       hide_completed: false,
+      due,
     };
   };
   const find = (args) => {
-    const t = tasks.find((x) => x.line === args.line);
+    const t = (days[args.offset] || []).find((x) => x.line === args.line);
     if (!t || t.text !== args.text) throw "That task has changed in the note.";
     return t;
   };
@@ -778,8 +864,8 @@ function mockInvoke() {
     if (due != null) t.due = due || null;
     return sync(t);
   };
+  const shown = (args) => view(args.show ?? args.offset);
   return async (cmd, args = {}) => {
-    if (args.offset && cmd !== "get_day" && cmd !== "save_notes") throw "Demo mode only edits today.";
     switch (cmd) {
       case "get_day":
         return view(args.offset);
@@ -789,30 +875,32 @@ function mockInvoke() {
         t.cancelled = false;
         t.done_date = t.done ? isoToday() : null;
         sync(t);
-        return view(args.offset);
+        return shown(args);
       }
       case "add_task":
-        tasks.push(apply(make(0, 0, ""), { title: args.text, priority: args.priority, due: args.due }));
-        renumber();
+        (days[args.offset] ||= []).push(apply(make(0, ""), { title: args.text, priority: args.priority, due: args.due }));
+        renumber(args.offset);
         return view(args.offset);
       case "update_task":
         apply(find(args), args);
-        return view(args.offset);
+        return shown(args);
       case "delete_task": {
+        const list = days[args.offset];
         const t = find(args);
-        const at = tasks.indexOf(t);
+        const at = list.indexOf(t);
         let end = at + 1;
-        while (end < tasks.length && tasks[end].level > t.level) end++;
-        const block = tasks.splice(at, end - at);
-        renumber();
-        return { view: view(args.offset), removed: { line: at, text: JSON.stringify(block), anchor: null } };
+        while (end < list.length && list[end].level > t.level) end++;
+        const block = list.splice(at, end - at);
+        renumber(args.offset);
+        return { view: shown(args), removed: { line: at, text: JSON.stringify(block), anchor: null } };
       }
       case "restore_task":
-        tasks.splice(args.line, 0, ...JSON.parse(args.text));
-        renumber();
-        return view(args.offset);
+        days[args.offset].splice(args.line, 0, ...JSON.parse(args.text));
+        renumber(args.offset);
+        return shown(args);
       case "save_notes":
-        notes = args.notes;
+        notes[args.offset] = args.notes;
+        if (!(args.offset in days)) days[args.offset] = [];
         return view(args.offset);
       case "get_config":
         return {
@@ -822,6 +910,7 @@ function mockInvoke() {
           tasks_heading: "## Tasks",
           notes_heading: "## Notes",
           hide_completed: false,
+          scan_days: 30,
         };
       default:
         return null;

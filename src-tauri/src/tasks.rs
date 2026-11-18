@@ -430,6 +430,17 @@ pub fn parse_tasks(content: &str) -> Vec<Task> {
     .collect()
 }
 
+/// Task yang belum selesai (bukan `[x]`, bukan `[-]`) dengan deadline paling
+/// lambat `through` (`YYYY-MM-DD`). Urutan file dipertahankan.
+pub fn due_by(tasks: &[Task], through: &str) -> Vec<Task> {
+    tasks
+        .iter()
+        .filter(|t| !t.done && !t.cancelled)
+        .filter(|t| t.due.as_deref().is_some_and(|d| d <= through))
+        .cloned()
+        .collect()
+}
+
 /* ---------- Quick-add ---------- */
 
 /// Hasil membaca input quick-add: judul bersih + token yang ditemukan.
@@ -886,6 +897,22 @@ mod tests {
         assert!(toggle_task(note, 2, "dalam ⏫", today()).is_err());
         assert!(update_task(note, 2, "dalam ⏫", &prio(Priority::Low), today()).is_err());
         assert!(delete_task(note, 5, "dalam juga").is_err());
+    }
+
+    #[test]
+    fn picks_open_tasks_due_by_a_date() {
+        let note = "## Tasks\n- [ ] lewat 📅 2026-11-10\n- [ ] hari ini ⏫ 📅 2026-11-17\n- [ ] besok 📅 2026-11-18\n- [ ] tanpa deadline\n- [x] selesai 📅 2026-11-01 ✅ 2026-11-02\n- [-] batal 📅 2026-11-01\n    - [ ] subtask lewat 📅 2026-11-12\n```\n- [ ] di kode 📅 2026-11-01\n```\n- [ ] bukan metadata 2026-11-01\n";
+        let tasks = parse_tasks(note);
+        let got = due_by(&tasks, "2026-11-17");
+        let titles: Vec<&str> = got.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, ["lewat", "hari ini", "subtask lewat"]);
+        assert_eq!(got[2].line, 7);
+        assert_eq!(got[1].priority, Priority::High);
+        // Batas tanggal ikut dihitung; baris tanpa metadata tidak pernah terpilih.
+        assert_eq!(due_by(&tasks, "2026-11-09").len(), 0);
+        assert_eq!(due_by(&tasks, "2026-11-18").len(), 4);
+        assert!(due_by(&parse_tasks(NOTE), "9999-12-31").is_empty());
+        assert!(due_by(&parse_tasks(""), "2026-11-17").is_empty());
     }
 
     /* ----- toggle ----- */

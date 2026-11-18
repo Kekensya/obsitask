@@ -13,6 +13,9 @@ Rust + Tauri 2, frontend HTML/CSS/JS polos (tanpa bundler, tanpa npm).
   - **Edit**: klik judul untuk mengubah teks (Enter simpan, Esc batal; token quick-add juga berlaku). Tombol `⋯` atau klik kanan membuka menu prioritas, deadline, dan hapus. Menghapus task ikut menghapus subtask-nya, dan bisa di-Undo beberapa detik.
   - **Metadata** memakai format emoji plugin Obsidian Tasks di akhir baris: `⏫` high, `🔼` medium, `🔽` low, `📅 YYYY-MM-DD` deadline, `✅ YYYY-MM-DD` selesai. Field Tasks lain (`➕`, `🛫`, `⏳`, …) dan block id dibiarkan utuh.
   - **Urutan tampil**: belum selesai dulu, lalu prioritas, lalu deadline; subtask tetap di bawah induknya. Urutan baris di file tidak pernah diubah.
+- **Overdue & due** — di atas daftar, task belum selesai dari daily note hari-hari sebelumnya yang deadline-nya paling lambat hari yang ditampilkan, lengkap dengan asal note-nya ("from Nov 10"). Mencentang, mengedit, mengubah prioritas/deadline, atau menghapus dari sini menulis ke file asalnya, dengan pengaman yang sama. Bagian ini bisa dilipat.
+  - Jumlah hari yang dipindai diatur di Settings ("Look back for due tasks", default 30, maksimum 365, 0 = mati).
+  - Hasil parse tiap note di-cache berdasarkan waktu modifikasi + ukuran file, jadi polling 2 detik hanya mengecek metadata file; note dibaca ulang hanya kalau berubah.
 - **Notes** — isi di bawah heading `## Notes` di daily note yang sama. Disimpan otomatis ±0,7 detik setelah berhenti mengetik. Heading ditambahkan di akhir file kalau belum ada; bagian lain file tidak disentuh.
 - **Yesterday / Today / Tomorrow** — pindah ke daily note kemarin atau besok.
 - File dibaca ulang tiap 2 detik, jadi perubahan dari Obsidian langsung muncul.
@@ -44,6 +47,7 @@ src/                  frontend widget
   main.js             buka index.html langsung di browser = mode contoh data
 src-tauri/
   src/tasks.rs        parser + penulis task/notes (logika murni, ada unit test)
+  src/scan.rs         cache parse daily note (mtime + ukuran) untuk "Overdue & due"
   src/config.rs       config + konversi format tanggal Obsidian
   src/lib.rs          command Tauri
   tauri.conf.json     ukuran & sifat window
@@ -55,7 +59,7 @@ Config tersimpan di `%APPDATA%\com.kekensya.obsitask\config.json`.
 
 ## Belum ada (sengaja)
 
-- Task ber-deadline dari daily note hari lain belum muncul pada hari jatuh temponya (bagian "Overdue & due" — fase berikutnya).
+- Task ber-deadline yang ditulis di daily note *setelah* hari yang ditampilkan, atau di note selain daily note, tidak ikut dipindai.
 - Recurring task, reminder/notifikasi, pomodoro, project/tag manager, drag-and-drop reorder, sinkronisasi.
 - Prioritas `🔺` / `⏬` plugin Tasks tidak dikelola (dibiarkan apa adanya di baris).
 - Efek blur ke desktop (acrylic/mica). Panel sekarang semi-transparan biasa.

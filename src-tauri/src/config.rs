@@ -17,7 +17,13 @@ pub struct Config {
     pub tasks_heading: String,
     /// Sembunyikan task yang sudah dicentang.
     pub hide_completed: bool,
+    /// Berapa hari ke belakang daily note dipindai untuk bagian "Overdue & due".
+    /// 0 = mati.
+    pub scan_days: u32,
 }
+
+/// Batas atas `scan_days`, supaya polling tetap ringan.
+pub const MAX_SCAN_DAYS: u32 = 365;
 
 impl Default for Config {
     fn default() -> Self {
@@ -28,6 +34,7 @@ impl Default for Config {
             notes_heading: "## Notes".to_string(),
             tasks_heading: "## Tasks".to_string(),
             hide_completed: false,
+            scan_days: 30,
         }
     }
 }
